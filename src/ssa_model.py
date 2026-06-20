@@ -352,7 +352,7 @@ class LSHBucketSSA(nn.Module):
     Higher sq.sk similarity -> higher LSH collision probability -> better recall.
     """
     def __init__(self, d, h, block=32, topk=4, sel_dim=32, n_rounds=4,
-                 n_buckets=8, cap=8, gate=False, causal=False):
+                 n_buckets=8, cap=8, gate=False, causal=False, scale=None):
         super().__init__()
         self.h, self.dh = h, d // h
         self.block, self.topk = block, topk
@@ -361,7 +361,7 @@ class LSHBucketSSA(nn.Module):
         self.sel_q = _mlp_sel(d, sel_dim)
         self.sel_k = _mlp_sel(d, sel_dim)
         self.sel_dim = sel_dim
-        self.scale = float(sel_dim ** 0.5)   # cosine temperature (reps are L2-normalized)
+        self.scale = float(sel_dim ** 0.5) if scale is None else float(scale)  # gate/route cosine temperature
         self.n_rounds, self.n_buckets, self.cap = n_rounds, n_buckets, cap
         self.gate, self.causal = gate, causal
         self.register_buffer("R", torch.randn(sel_dim, n_rounds, n_buckets))

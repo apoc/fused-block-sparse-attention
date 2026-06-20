@@ -6,13 +6,13 @@ def run(attn, steps, batch, n_pairs, seq_len, d, h, layers, lr, warmup,
         block, topk, sel_dim, device, log_every, curriculum,
         gate=False, route_lambda=0.0, balance_lambda=0.0, route_anneal=False,
         n_centroids=16, cpq=2, cap=4, refine_topk=None, eval_refine_topk=None,
-        n_rounds=4, n_buckets=8):
+        n_rounds=4, n_buckets=8, lsh_scale=None):
     # Train with refine_topk (or None = no refinement, full bucket).
     kw = dict(block=block, topk=topk, sel_dim=sel_dim, gate=gate)
     if attn == "centroid":
         kw.update(n_centroids=n_centroids, cpq=cpq, cap=cap, refine_topk=refine_topk)
     if attn == "lsh":
-        kw.update(n_rounds=n_rounds, n_buckets=n_buckets, cap=cap)
+        kw.update(n_rounds=n_rounds, n_buckets=n_buckets, cap=cap, scale=lsh_scale)
     m = TinyTransformer(D.VOCAB, D.NV, d=d, h=h, layers=layers, max_len=seq_len+8,
                         attn=attn, **kw).to(device)
     opt = torch.optim.AdamW(m.parameters(), lr=lr, betas=(0.9, 0.95), weight_decay=0.01)
@@ -131,6 +131,7 @@ if __name__ == "__main__":
     p.add_argument("--cap", type=int, default=4, help="bucket capacity per centroid (centroid attn)")
     p.add_argument("--n_rounds", type=int, default=4, help="LSH hash rounds (lsh attn)")
     p.add_argument("--n_buckets", type=int, default=8, help="LSH buckets per round (lsh attn)")
+    p.add_argument("--lsh_scale", type=float, default=None, help="LSH gate/route cosine temperature (default sqrt(sel_dim))")
     p.add_argument("--refine_topk", type=int, default=None,
                    help="within-bucket refinement during TRAINING (None = no refine)")
     p.add_argument("--eval_refine_topk", type=int, default=None,
@@ -144,6 +145,6 @@ if __name__ == "__main__":
               balance_lambda=a.balance_lambda,
               route_anneal=a.route_anneal, n_centroids=a.n_centroids, cpq=a.cpq,
               cap=a.cap, refine_topk=a.refine_topk, eval_refine_topk=a.eval_refine_topk,
-              n_rounds=a.n_rounds, n_buckets=a.n_buckets)
+              n_rounds=a.n_rounds, n_buckets=a.n_buckets, lsh_scale=a.lsh_scale)
     json.dump(res, open(a.out, "w"), indent=2)
     print("wrote", a.out)
