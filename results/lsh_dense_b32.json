@@ -1,0 +1,57 @@
+{
+  "attn": "dense",
+  "gate": true,
+  "route_lambda": 1.0,
+  "balance_lambda": 0.0,
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.3206,
+      "acc": 0.0469,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 2,
+      "sec": 0.5
+    },
+    {
+      "step": 1500,
+      "loss": 2.171,
+      "acc": 0.2188,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 5,
+      "sec": 60.2
+    },
+    {
+      "step": 3000,
+      "loss": 2.5727,
+      "acc": 0.0938,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 126.6
+    },
+    {
+      "step": 4500,
+      "loss": 2.3271,
+      "acc": 0.2344,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 198.1
+    },
+    {
+      "step": 5999,
+      "loss": 2.3884,
+      "acc": 0.1719,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 269.5
+    }
+  ],
+  "final_acc": 0.1787,
+  "final_hit": null,
+  "refine_acc": null,
+  "refine_hit": null
+}

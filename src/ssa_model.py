@@ -335,11 +335,152 @@ class CentroidSSA(nn.Module):
         return self.o(out)
 
 
+class LSHBucketSSA(nn.Module):
+    """Linear-cost selection via LSH bucketing + full-fidelity refine.
+
+    Selection is O(nblk * n_rounds * (n_buckets + cap)) -- no nblk^2 matrix is
+    ever formed. Each key block is hashed (argmax of rep @ R, R fixed random)
+    into one bucket per round; each query block reads its own bucket across
+    rounds, then RE-SCORES the candidate blocks with the real sel_q.sel_k dot
+    (full fidelity) and keeps the top-`topk`, matching BlockSparseSSA's budget so
+    the attention read sees an identical-size, lossless candidate set ("prune the
+    search, not the representation").
+
+    Learning: R is a fixed buffer (not trained). The selector MLPs learn
+    hash-friendly reps via (a) the auxiliary routing loss on the dense last-block
+    logits (sq_last . sk_all, O(nblk)) and (b) gate coupling on selected blocks.
+    Higher sq.sk similarity -> higher LSH collision probability -> better recall.
+    """
+    def __init__(self, d, h, block=32, topk=4, sel_dim=32, n_rounds=4,
+                 n_buckets=8, cap=8, gate=False, causal=False):
+        super().__init__()
+        self.h, self.dh = h, d // h
+        self.block, self.topk = block, topk
+        self.qkv = nn.Linear(d, 3 * d)
+        self.o = nn.Linear(d, d)
+        self.sel_q = _mlp_sel(d, sel_dim)
+        self.sel_k = _mlp_sel(d, sel_dim)
+        self.sel_dim = sel_dim
+        self.scale = float(sel_dim ** 0.5)   # cosine temperature (reps are L2-normalized)
+        self.n_rounds, self.n_buckets, self.cap = n_rounds, n_buckets, cap
+        self.gate, self.causal = gate, causal
+        self.register_buffer("R", torch.randn(sel_dim, n_rounds, n_buckets))
+        self.last_hit = None
+        self.last_block_logits = None
+
+    def forward(self, x, needle_pos=None):
+        B, L, D = x.shape
+        Bs = self.block
+        pad = (Bs - L % Bs) % Bs
+        if pad:
+            x = F.pad(x, (0, 0, 0, pad))
+        Lp = L + pad
+        nblk = Lp // Bs
+        H, dh = self.h, self.dh
+        dev = x.device
+        R_, NB, cap = self.n_rounds, self.n_buckets, min(self.cap, nblk)
+
+        q, k, v = self.qkv(x).chunk(3, -1)
+        q = q.view(B, Lp, H, dh).transpose(1, 2)
+        k = k.view(B, Lp, H, dh).transpose(1, 2)
+        v = v.view(B, Lp, H, dh).transpose(1, 2)
+
+        sq = F.normalize(self.sel_q(x).view(B, nblk, Bs, self.sel_dim).mean(2), dim=-1)  # (B,nblk,s)
+        skv = self.sel_k(x).view(B, nblk, Bs, self.sel_dim)
+        sk = F.normalize(torch.maximum(skv.mean(2), skv.max(2).values), dim=-1)          # (B,nblk,s)
+        diag = torch.arange(nblk, device=dev)
+
+        # route-loss hook: dense scores for the LAST query block only, O(nblk)
+        self.last_block_logits = self.scale * torch.bmm(sk, sq[:, nblk - 1:nblk].transpose(-1, -2)).squeeze(-1)
+
+        # ---- LSH bucketing (fixed random R), O(nblk * R_ * NB) ----
+        kbucket = torch.einsum("bns,src->bnrc", sk, self.R).argmax(-1)  # (B,nblk,R_)
+        qbucket = torch.einsum("bns,src->bnrc", sq, self.R).argmax(-1)  # (B,nblk,R_)
+        bI = torch.arange(B, device=dev).view(B, 1).expand(B, nblk)
+        jI = diag.view(1, nblk).expand(B, nblk)
+        cands = []
+        for r in range(R_):
+            kb_r, qb_r = kbucket[..., r], qbucket[..., r]
+            oh = F.one_hot(kb_r, NB)
+            within = (oh.cumsum(1) - oh).gather(2, kb_r.unsqueeze(-1)).squeeze(-1)
+            keep = within < cap
+            buckets = torch.full((B, NB, cap), -1, dtype=torch.long, device=dev)
+            buckets[bI[keep], kb_r[keep], within[keep]] = jI[keep]
+            cands.append(torch.gather(buckets, 1, qb_r.unsqueeze(-1).expand(B, nblk, cap)))
+        cand = torch.cat(cands, dim=-1)                               # (B,nblk,P) ids, -1=empty
+        P = cand.shape[-1]
+        valid = cand >= 0
+        cand_c = cand.clamp(min=0)
+        # dedup across rounds (P is constant, so this stays linear in nblk)
+        eq = cand_c.unsqueeze(-1) == cand_c.unsqueeze(-2)
+        lower = torch.tril(torch.ones(P, P, dtype=torch.bool, device=dev), -1)
+        valid = valid & ~(eq & lower).any(-1)
+
+        # ---- full-fidelity refine to fixed budget (parity with block-sparse) ----
+        bb = torch.arange(B, device=dev).view(B, 1, 1)
+        sk_cand = sk[bb, cand_c]                                       # (B,nblk,P,s)
+        score = self.scale * (sq.unsqueeze(2) * sk_cand).sum(-1)       # (B,nblk,P) cosine*scale
+        score = score.masked_fill(~valid, float("-inf"))
+        score = score.masked_fill(cand_c == diag.view(1, nblk, 1), float("-inf"))  # own added below
+        if self.causal:
+            score = score.masked_fill(cand_c > diag.view(1, nblk, 1), float("-inf"))
+        kk_c = min(self.topk, max(1, nblk - 1))
+        rk = min(kk_c, P)
+        topv, topi = score.topk(rk, dim=-1)
+        sel_content = torch.gather(cand_c, -1, topi)                  # (B,nblk,rk)
+        cont_valid = torch.isfinite(topv)
+
+        own = diag.view(1, nblk, 1).expand(B, nblk, 1)
+        own_score = self.scale * (sq * sk).sum(-1, keepdim=True)       # (B,nblk,1)
+        sel = torch.cat([own, sel_content], dim=-1)                   # (B,nblk,kk)
+        sval = torch.cat([torch.ones(B, nblk, 1, dtype=torch.bool, device=dev), cont_valid], dim=-1)
+        gscore = torch.cat([own_score, topv.masked_fill(~cont_valid, 0.0)], dim=-1)
+        kk = sel.shape[-1]
+
+        # ---- gather selected K/V and attend (non-causal for MQAR) ----
+        kb = k.view(B, H, nblk, Bs, dh)
+        vb = v.view(B, H, nblk, Bs, dh)
+        bi = torch.arange(B, device=dev).view(B, 1, 1, 1).expand(B, H, nblk, kk)
+        hi = torch.arange(H, device=dev).view(1, H, 1, 1).expand(B, H, nblk, kk)
+        si = sel.view(B, 1, nblk, kk).expand(B, H, nblk, kk)
+        k_sel = kb[bi, hi, si].reshape(B, H, nblk, kk * Bs, dh)
+        v_sel = vb[bi, hi, si].reshape(B, H, nblk, kk * Bs, dh)
+        qB = q.view(B, H, nblk, Bs, dh)
+
+        add = torch.zeros(B, H, nblk, kk, device=dev, dtype=qB.dtype)
+        add = add.masked_fill(~sval.view(B, 1, nblk, kk), float("-inf"))
+        if self.gate:
+            gbias = F.logsigmoid(gscore).masked_fill(~sval, 0.0)
+            add = add + gbias.view(B, 1, nblk, kk).to(qB.dtype)
+        if self.causal:
+            NEG = torch.finfo(torch.float32).min
+            tri = torch.zeros(Bs, kk * Bs, device=dev, dtype=qB.dtype)
+            tri[:, :Bs] = torch.triu(torch.full((Bs, Bs), NEG, device=dev, dtype=qB.dtype), 1)
+            attn_mask = (add.repeat_interleave(Bs, dim=-1).reshape(B, H, nblk, 1, kk * Bs)
+                         + tri).reshape(B * H * nblk, Bs, kk * Bs)
+        else:
+            attn_mask = add.repeat_interleave(Bs, dim=-1).reshape(B * H * nblk, 1, kk * Bs)
+
+        out = _sdpa(qB.reshape(B * H * nblk, Bs, dh),
+                    k_sel.reshape(B * H * nblk, kk * Bs, dh),
+                    v_sel.reshape(B * H * nblk, kk * Bs, dh),
+                    attn_mask).reshape(B, H, nblk, Bs, dh)
+        out = out.reshape(B, H, Lp, dh).transpose(1, 2).reshape(B, Lp, D)[:, :L]
+
+        if needle_pos is not None:
+            needle_blk = needle_pos // Bs
+            chosen_last = sel[:, nblk - 1, :]
+            self.last_hit = (chosen_last == needle_blk.unsqueeze(-1)).any(-1).float().mean().item()
+        return self.o(out)
+
+
 def _make_attn(d, h, attn, kw):
     if attn == "dense":
         return DenseAttention(d, h, causal=kw.get("causal", False))
     if attn == "centroid":
         return CentroidSSA(d, h, **kw)
+    if attn == "lsh":
+        return LSHBucketSSA(d, h, **kw)
     return BlockSparseSSA(d, h, **kw)
 
 

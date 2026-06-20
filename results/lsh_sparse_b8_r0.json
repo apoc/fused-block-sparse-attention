@@ -1,0 +1,39 @@
+{
+  "attn": "sparse",
+  "gate": true,
+  "route_lambda": 0.0,
+  "balance_lambda": 0.0,
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.373,
+      "acc": 0.0,
+      "hit": 0.6875,
+      "route": 0.0,
+      "pairs": 2,
+      "sec": 0.9
+    },
+    {
+      "step": 3000,
+      "loss": 0.2292,
+      "acc": 0.9219,
+      "hit": 0.8125,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 261.5
+    },
+    {
+      "step": 5999,
+      "loss": 0.0428,
+      "acc": 0.9688,
+      "hit": 0.7422,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 538.9
+    }
+  ],
+  "final_acc": 0.959,
+  "final_hit": 0.7803,
+  "refine_acc": null,
+  "refine_hit": null
+}

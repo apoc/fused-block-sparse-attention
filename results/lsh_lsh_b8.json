@@ -1,0 +1,57 @@
+{
+  "attn": "lsh",
+  "gate": true,
+  "route_lambda": 1.0,
+  "balance_lambda": 0.0,
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.3689,
+      "acc": 0.0,
+      "hit": 0.0312,
+      "route": 4.2773,
+      "pairs": 2,
+      "sec": 1.0
+    },
+    {
+      "step": 1500,
+      "loss": 0.6807,
+      "acc": 0.8438,
+      "hit": 0.8438,
+      "route": 0.1986,
+      "pairs": 5,
+      "sec": 135.1
+    },
+    {
+      "step": 3000,
+      "loss": 0.1571,
+      "acc": 0.9531,
+      "hit": 0.9297,
+      "route": 0.2255,
+      "pairs": 8,
+      "sec": 276.3
+    },
+    {
+      "step": 4500,
+      "loss": 0.1819,
+      "acc": 0.9219,
+      "hit": 0.9453,
+      "route": 0.1935,
+      "pairs": 8,
+      "sec": 422.2
+    },
+    {
+      "step": 5999,
+      "loss": 0.2615,
+      "acc": 0.9375,
+      "hit": 0.8281,
+      "route": 0.1837,
+      "pairs": 8,
+      "sec": 568.1
+    }
+  ],
+  "final_acc": 0.9219,
+  "final_hit": 0.8447,
+  "refine_acc": null,
+  "refine_hit": null
+}
