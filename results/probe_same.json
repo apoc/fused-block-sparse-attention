@@ -1,0 +1,26 @@
+[
+  {
+    "writer": "none",
+    "gap": 1,
+    "top1": 0.1151,
+    "top8": 0.9104
+  },
+  {
+    "writer": "full",
+    "gap": 1,
+    "top1": 0.1201,
+    "top8": 0.9128
+  },
+  {
+    "writer": "linear",
+    "gap": 1,
+    "top1": 0.1153,
+    "top8": 0.9118
+  },
+  {
+    "writer": "window",
+    "gap": 1,
+    "top1": 0.1189,
+    "top8": 0.9097
+  }
+]

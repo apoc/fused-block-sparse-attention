@@ -11,7 +11,9 @@ env/
 *.bin
 *.pt
 *.json
+!results/*.json
 *.csv
+!results/*.csv
 shakespeare.txt
 tinystories*
 *.log

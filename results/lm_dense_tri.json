@@ -1,0 +1,17 @@
+{
+  "attn": "dense",
+  "use_triton": false,
+  "gate": false,
+  "params": 44913152,
+  "val_loss": 2.6682,
+  "val_ppl": 14.414,
+  "ppl_by_len": {
+    "128": 15.411,
+    "256": 14.536,
+    "512": 14.092
+  },
+  "steps": 5000,
+  "L": 512,
+  "d": 512,
+  "layers": 6
+}

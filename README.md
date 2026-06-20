@@ -1,4 +1,4 @@
-# MiniSSA: Fused Block-Sparse Attention with Learned Content-Dependent Selection
+# Fused Block-Sparse Attention with Learned Content-Dependent Selection
 
 A sub-quadratic attention mechanism for long-context transformers, implemented
 with a fused Triton kernel that achieves memory parity with dense
@@ -14,10 +14,12 @@ FlashAttention and 7.4x latency speedup at 262k tokens.
 | Latency crossover | - | ~32k tokens |
 | MQAR retrieval hit | - | 0.99 |
 
+All raw experiment outputs are in `results/` (48 JSON/CSV files).
+
 ## Directory Structure
 
 ```
-ssa/
+fused-block-sparse-attention/
 ├── src/                    # Python source code
 │   ├── ssa_model.py        # Core attention modules (Dense, BlockSparse, Centroid)
 │   ├── ssa_data.py         # MQAR data generator
@@ -34,13 +36,11 @@ ssa/
 │   ├── route_probe.py      # Routing subspace probe (arXiv:2603.20997)
 │   └── summarize.py        # Results summary utility
 ├── scripts/                # Shell scripts for DGX execution
-├── paper/                  # Workshop paper (LaTeX + PDF)
+├── results/                # Experiment outputs (48 JSON/CSV files)
+├── paper/                  # Workshop paper
 │   ├── main.tex
 │   └── main.pdf
-├── reference/              # Sibling implementation artifacts
-├── AGENTS.md               # Harness configuration
-├── MiniSSA_DGX_Spark_runbook.md  # Original experiment runbook
-└── NEXT_STEPS.md           # Detailed experiment log and results
+└── README.md
 ```
 
 ## Key Components
@@ -53,7 +53,7 @@ attention logits, creating a differentiable path. An auxiliary routing loss
 (cross-entropy for MQAR, InfoNCE for centroid routing) provides cold-start
 supervision.
 
-### 2. Fused Triton Kernel (`triton_kernel.py`)
+### 2. Fused Triton Kernel (`src/triton_kernel.py`)
 
 - **Forward:** Online-softmax in SRAM, iterating over selected key blocks via
   index list. Never materializes gathered K/V.
@@ -77,8 +77,7 @@ coarse routing.
 
 ## Reproduction
 
-Scripts are designed for the DGX Spark environment (`ssh -p 5555
-apoc@localhost`). From the `src/` directory:
+From the `src/` directory with a CUDA GPU:
 
 ```bash
 # MQAR training (block-sparse with gate coupling)

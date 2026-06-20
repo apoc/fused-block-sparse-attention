@@ -1,0 +1,9 @@
+{
+  "attn": "sparse",
+  "gate": true,
+  "distill_lambda": 1.0,
+  "params": 3400192,
+  "val_loss": 1.576,
+  "val_bpc": 2.2737,
+  "val_ppl": 4.835
+}

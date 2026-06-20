@@ -1,0 +1,8 @@
+{
+  "attn": "dense",
+  "use_triton": false,
+  "niah_acc": {
+    "512": 0.0
+  },
+  "n_samples": 50
+}

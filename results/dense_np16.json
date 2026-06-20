@@ -1,0 +1,289 @@
+{
+  "attn": "dense",
+  "gate": false,
+  "route_lambda": 0.0,
+  "balance_lambda": 0.0,
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.4316,
+      "acc": 0.0156,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 2,
+      "sec": 0.5
+    },
+    {
+      "step": 200,
+      "loss": 1.9332,
+      "acc": 0.4844,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 2,
+      "sec": 8.0
+    },
+    {
+      "step": 400,
+      "loss": 2.3741,
+      "acc": 0.3125,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 3,
+      "sec": 15.9
+    },
+    {
+      "step": 600,
+      "loss": 2.3642,
+      "acc": 0.2188,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 4,
+      "sec": 24.0
+    },
+    {
+      "step": 800,
+      "loss": 2.6018,
+      "acc": 0.1719,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 5,
+      "sec": 32.3
+    },
+    {
+      "step": 1000,
+      "loss": 2.4087,
+      "acc": 0.2969,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 6,
+      "sec": 41.0
+    },
+    {
+      "step": 1200,
+      "loss": 2.821,
+      "acc": 0.1562,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 7,
+      "sec": 50.0
+    },
+    {
+      "step": 1400,
+      "loss": 3.0479,
+      "acc": 0.0781,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 8,
+      "sec": 59.3
+    },
+    {
+      "step": 1600,
+      "loss": 2.6779,
+      "acc": 0.125,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 9,
+      "sec": 68.8
+    },
+    {
+      "step": 1800,
+      "loss": 2.4254,
+      "acc": 0.1719,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 10,
+      "sec": 78.7
+    },
+    {
+      "step": 2000,
+      "loss": 3.0566,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 11,
+      "sec": 88.8
+    },
+    {
+      "step": 2200,
+      "loss": 2.8601,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 12,
+      "sec": 99.2
+    },
+    {
+      "step": 2400,
+      "loss": 3.0707,
+      "acc": 0.0469,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 13,
+      "sec": 109.9
+    },
+    {
+      "step": 2600,
+      "loss": 3.0435,
+      "acc": 0.0625,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 14,
+      "sec": 120.8
+    },
+    {
+      "step": 2800,
+      "loss": 2.9725,
+      "acc": 0.1406,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 15,
+      "sec": 132.0
+    },
+    {
+      "step": 3000,
+      "loss": 2.856,
+      "acc": 0.1406,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 143.5
+    },
+    {
+      "step": 3200,
+      "loss": 2.8964,
+      "acc": 0.0781,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 155.3
+    },
+    {
+      "step": 3400,
+      "loss": 2.9075,
+      "acc": 0.0469,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 167.1
+    },
+    {
+      "step": 3600,
+      "loss": 2.9229,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 178.9
+    },
+    {
+      "step": 3800,
+      "loss": 2.8915,
+      "acc": 0.0781,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 190.7
+    },
+    {
+      "step": 4000,
+      "loss": 2.761,
+      "acc": 0.0625,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 202.5
+    },
+    {
+      "step": 4200,
+      "loss": 2.8136,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 214.3
+    },
+    {
+      "step": 4400,
+      "loss": 2.7855,
+      "acc": 0.0781,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 226.1
+    },
+    {
+      "step": 4600,
+      "loss": 2.8634,
+      "acc": 0.1562,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 237.9
+    },
+    {
+      "step": 4800,
+      "loss": 2.6753,
+      "acc": 0.1562,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 249.7
+    },
+    {
+      "step": 5000,
+      "loss": 2.718,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 261.4
+    },
+    {
+      "step": 5200,
+      "loss": 2.7102,
+      "acc": 0.0938,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 273.2
+    },
+    {
+      "step": 5400,
+      "loss": 2.7078,
+      "acc": 0.125,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 285.0
+    },
+    {
+      "step": 5600,
+      "loss": 2.7446,
+      "acc": 0.0938,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 296.8
+    },
+    {
+      "step": 5800,
+      "loss": 2.7134,
+      "acc": 0.1094,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 308.6
+    },
+    {
+      "step": 5999,
+      "loss": 2.7164,
+      "acc": 0.125,
+      "hit": null,
+      "route": 0.0,
+      "pairs": 16,
+      "sec": 320.3
+    }
+  ],
+  "final_acc": 0.126,
+  "final_hit": null
+}

@@ -1,0 +1,15 @@
+{
+  "attn": "dense",
+  "gate": false,
+  "distill_lambda": 0.0,
+  "params": 3325952,
+  "val_loss": 1.6518,
+  "val_bpc": 2.383,
+  "val_ppl": 5.216,
+  "ppl_by_len": {
+    "64": 5.608,
+    "128": 5.309,
+    "256": 5.252,
+    "512": 5.248
+  }
+}

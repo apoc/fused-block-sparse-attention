@@ -1,0 +1,15 @@
+{
+  "attn": "sparse",
+  "gate": true,
+  "distill_lambda": 0.0,
+  "params": 3400192,
+  "val_loss": 1.5245,
+  "val_bpc": 2.1993,
+  "val_ppl": 4.593,
+  "ppl_by_len": {
+    "64": 4.866,
+    "128": 4.727,
+    "256": 4.593,
+    "512": 4.571
+  }
+}

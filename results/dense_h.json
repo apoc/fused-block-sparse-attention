@@ -1,0 +1,255 @@
+{
+  "attn": "dense",
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.5652,
+      "acc": 0.0,
+      "hit": null,
+      "pairs": 2,
+      "sec": 0.5
+    },
+    {
+      "step": 200,
+      "loss": 1.9233,
+      "acc": 0.4531,
+      "hit": null,
+      "pairs": 2,
+      "sec": 8.0
+    },
+    {
+      "step": 400,
+      "loss": 1.3044,
+      "acc": 0.5156,
+      "hit": null,
+      "pairs": 2,
+      "sec": 15.5
+    },
+    {
+      "step": 600,
+      "loss": 1.9648,
+      "acc": 0.3906,
+      "hit": null,
+      "pairs": 3,
+      "sec": 23.1
+    },
+    {
+      "step": 800,
+      "loss": 1.968,
+      "acc": 0.375,
+      "hit": null,
+      "pairs": 3,
+      "sec": 30.9
+    },
+    {
+      "step": 1000,
+      "loss": 2.4228,
+      "acc": 0.25,
+      "hit": null,
+      "pairs": 4,
+      "sec": 38.7
+    },
+    {
+      "step": 1200,
+      "loss": 2.3793,
+      "acc": 0.1875,
+      "hit": null,
+      "pairs": 4,
+      "sec": 46.8
+    },
+    {
+      "step": 1400,
+      "loss": 2.2072,
+      "acc": 0.2188,
+      "hit": null,
+      "pairs": 4,
+      "sec": 54.9
+    },
+    {
+      "step": 1600,
+      "loss": 2.3812,
+      "acc": 0.1719,
+      "hit": null,
+      "pairs": 5,
+      "sec": 63.2
+    },
+    {
+      "step": 1800,
+      "loss": 2.411,
+      "acc": 0.1406,
+      "hit": null,
+      "pairs": 5,
+      "sec": 71.5
+    },
+    {
+      "step": 2000,
+      "loss": 2.1253,
+      "acc": 0.2188,
+      "hit": null,
+      "pairs": 6,
+      "sec": 79.8
+    },
+    {
+      "step": 2200,
+      "loss": 2.5853,
+      "acc": 0.125,
+      "hit": null,
+      "pairs": 6,
+      "sec": 88.5
+    },
+    {
+      "step": 2400,
+      "loss": 2.022,
+      "acc": 0.2031,
+      "hit": null,
+      "pairs": 6,
+      "sec": 97.2
+    },
+    {
+      "step": 2600,
+      "loss": 2.5208,
+      "acc": 0.1094,
+      "hit": null,
+      "pairs": 7,
+      "sec": 106.1
+    },
+    {
+      "step": 2800,
+      "loss": 2.3087,
+      "acc": 0.0938,
+      "hit": null,
+      "pairs": 7,
+      "sec": 115.2
+    },
+    {
+      "step": 3000,
+      "loss": 2.5032,
+      "acc": 0.0938,
+      "hit": null,
+      "pairs": 8,
+      "sec": 124.2
+    },
+    {
+      "step": 3200,
+      "loss": 2.3051,
+      "acc": 0.1094,
+      "hit": null,
+      "pairs": 8,
+      "sec": 133.5
+    },
+    {
+      "step": 3400,
+      "loss": 2.2739,
+      "acc": 0.1875,
+      "hit": null,
+      "pairs": 8,
+      "sec": 142.9
+    },
+    {
+      "step": 3600,
+      "loss": 2.2571,
+      "acc": 0.125,
+      "hit": null,
+      "pairs": 8,
+      "sec": 152.2
+    },
+    {
+      "step": 3800,
+      "loss": 2.3741,
+      "acc": 0.1406,
+      "hit": null,
+      "pairs": 8,
+      "sec": 161.5
+    },
+    {
+      "step": 4000,
+      "loss": 2.1524,
+      "acc": 0.1406,
+      "hit": null,
+      "pairs": 8,
+      "sec": 170.9
+    },
+    {
+      "step": 4200,
+      "loss": 2.2952,
+      "acc": 0.1094,
+      "hit": null,
+      "pairs": 8,
+      "sec": 180.2
+    },
+    {
+      "step": 4400,
+      "loss": 2.1988,
+      "acc": 0.1562,
+      "hit": null,
+      "pairs": 8,
+      "sec": 189.5
+    },
+    {
+      "step": 4600,
+      "loss": 2.1366,
+      "acc": 0.2031,
+      "hit": null,
+      "pairs": 8,
+      "sec": 198.9
+    },
+    {
+      "step": 4800,
+      "loss": 2.0886,
+      "acc": 0.0938,
+      "hit": null,
+      "pairs": 8,
+      "sec": 208.2
+    },
+    {
+      "step": 5000,
+      "loss": 2.0703,
+      "acc": 0.2031,
+      "hit": null,
+      "pairs": 8,
+      "sec": 217.5
+    },
+    {
+      "step": 5200,
+      "loss": 2.0917,
+      "acc": 0.0938,
+      "hit": null,
+      "pairs": 8,
+      "sec": 226.9
+    },
+    {
+      "step": 5400,
+      "loss": 2.1071,
+      "acc": 0.125,
+      "hit": null,
+      "pairs": 8,
+      "sec": 236.2
+    },
+    {
+      "step": 5600,
+      "loss": 2.073,
+      "acc": 0.2188,
+      "hit": null,
+      "pairs": 8,
+      "sec": 245.6
+    },
+    {
+      "step": 5800,
+      "loss": 2.0086,
+      "acc": 0.25,
+      "hit": null,
+      "pairs": 8,
+      "sec": 254.9
+    },
+    {
+      "step": 5999,
+      "loss": 2.1093,
+      "acc": 0.1875,
+      "hit": null,
+      "pairs": 8,
+      "sec": 264.2
+    }
+  ],
+  "final_acc": 0.167,
+  "final_hit": null
+}
