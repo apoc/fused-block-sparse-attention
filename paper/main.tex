@@ -509,12 +509,25 @@ that, to our knowledge, has not been previously characterized.
 
 We demonstrated that block-sparse attention with a fused Triton kernel
 achieves memory parity with dense FlashAttention and $7.4\times$ latency
-speedup at long contexts, while maintaining within-4\% perplexity on a
-real language model. The gate-coupled selector training recipe is simple,
-effective, and requires no separate pre-training stage. The centroid routing
-negative result, perfect recall but broken accuracy, identifies
-representation quality under coarse routing as the open challenge for
-genuinely linear selection.
+speedup at long contexts, while maintaining within-4\% perplexity on a real
+language model. The gate-coupled selector training recipe is simple,
+effective, and requires no separate pre-training stage.
+
+The centroid routing negative result, perfect retrieval recall but degraded
+task accuracy, isolates representation quality under coarse routing as the
+central obstacle to genuinely linear selection, distinct from the
+routing-quality problem that InfoNCE resolves. We believe this distinction is
+useful for future work on sub-quadratic selection: solving the routing
+objective is necessary but not sufficient.
+
+Promising directions include scaling to the 100M+ regime where
+needle-in-a-haystack retrieval becomes measurable, extending the kernel to
+autoregressive KV-cache decoding, and designing a linear-selection mechanism
+that preserves the representation quality of pairwise scoring. More broadly,
+the fused kernel removes the implementation barrier that has masked
+block-sparse attention's asymptotic advantage: at long contexts,
+content-dependent sparsity is now both faster and lighter than dense
+attention in practice, not merely in theory.
 
 % ─═ References ════════════════════════════════════════════════════════════
 \bibliographystyle{plain}
