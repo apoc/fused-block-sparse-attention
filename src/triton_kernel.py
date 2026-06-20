@@ -28,9 +28,9 @@ def _bsattn_fwd(
     nblk, kk,
     BS: tl.constexpr, DH: tl.constexpr, KK: tl.constexpr, SCALE: tl.constexpr,
 ):
-    pid_b = tl.program_id(0)
-    pid_h = tl.program_id(1)
-    pid_qb = tl.program_id(2)
+    pid_qb = tl.program_id(0).to(tl.int64)
+    pid_h = tl.program_id(1).to(tl.int64)
+    pid_b = tl.program_id(2).to(tl.int64)
 
     q_row = tl.arange(0, BS)
     q_col = tl.arange(0, DH)
@@ -48,7 +48,7 @@ def _bsattn_fwd(
         causal_valid = q_row[:, None] >= k_row[None, :]
 
     for j in tl.static_range(KK):
-        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j)
+        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j).to(tl.int64)
         k_base = pid_b * k_stride_b + pid_h * k_stride_h + kblk * BS * k_stride_l
         k_off = k_base + k_row[:, None] * k_stride_l + k_col[None, :]
         k = tl.load(K_ptr + k_off).to(tl.float32)
@@ -86,9 +86,9 @@ def _bsattn_bwd(
     nblk, kk,
     BS: tl.constexpr, DH: tl.constexpr, KK: tl.constexpr, SCALE: tl.constexpr,
 ):
-    pid_b = tl.program_id(0)
-    pid_h = tl.program_id(1)
-    pid_qb = tl.program_id(2)
+    pid_qb = tl.program_id(0).to(tl.int64)
+    pid_h = tl.program_id(1).to(tl.int64)
+    pid_b = tl.program_id(2).to(tl.int64)
 
     q_row = tl.arange(0, BS)
     q_col = tl.arange(0, DH)
@@ -108,7 +108,7 @@ def _bsattn_bwd(
     l_i = tl.zeros((BS,), dtype=tl.float32)
 
     for j in tl.static_range(KK):
-        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j)
+        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j).to(tl.int64)
         k_base = pid_b * k_stride_b + pid_h * k_stride_h + kblk * BS * k_stride_l
         k_off = k_base + k_row[:, None] * k_stride_l + k_col[None, :]
         k = tl.load(K_ptr + k_off).to(tl.float32)
@@ -131,7 +131,7 @@ def _bsattn_bwd(
     # ---- pass 2: compute D = sum_j rowsum(P_j * dP_j) ----
     D_acc = tl.zeros((BS,), dtype=tl.float32)
     for j in tl.static_range(KK):
-        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j)
+        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j).to(tl.int64)
         k_base = pid_b * k_stride_b + pid_h * k_stride_h + kblk * BS * k_stride_l
         k_off = k_base + k_row[:, None] * k_stride_l + k_col[None, :]
         k = tl.load(K_ptr + k_off).to(tl.float32)
@@ -152,7 +152,7 @@ def _bsattn_bwd(
     # ---- pass 3: compute dQ, dK, dV ----
     dQ_acc = tl.zeros((BS, DH), dtype=tl.float32)
     for j in tl.static_range(KK):
-        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j)
+        kblk = tl.load(sel_ptr + pid_b * sel_stride_b + pid_qb * sel_stride_n + j).to(tl.int64)
         k_base = pid_b * k_stride_b + pid_h * k_stride_h + kblk * BS * k_stride_l
         k_off = k_base + k_row[:, None] * k_stride_l + k_col[None, :]
         k = tl.load(K_ptr + k_off).to(tl.float32)
@@ -193,7 +193,7 @@ def bsattn_forward(q, k, v, sel, gate_bias=None, causal=False):
     sel_c = sel.contiguous().to(torch.int32)
     gate_c = gate_bias.contiguous() if gate_bias is not None else None
 
-    grid = (B, H, nblk)
+    grid = (nblk, H, B)
     _bsattn_fwd[grid](
         q, k, v, o, sel_c, gate_c,
         USE_GATE=(gate_c is not None), CAUSAL=causal,
@@ -220,7 +220,7 @@ def bsattn_backward(q, k, v, sel, o, do, gate_bias=None, causal=False):
     dK = torch.zeros_like(k)
     dV = torch.zeros_like(v)
 
-    grid = (B, H, nblk)
+    grid = (nblk, H, B)
     _bsattn_bwd[grid](
         q, k, v, o, do, dQ, dK, dV, sel_c, gate_c,
         USE_GATE=(gate_c is not None), CAUSAL=causal,

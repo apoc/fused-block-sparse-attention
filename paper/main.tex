@@ -67,6 +67,10 @@ shorter context windows. We also investigate centroid-based linear selection
 block-pair selection, finding that InfoNCE contrastive training fixes a
 critical collapse failure in the routing loss (hit $0.19 \to 1.0$) but that
 task accuracy remains bottlenecked by selection precision, not routing recall.
+We further isolate selection from the attention read up to 16M tokens and show
+that single-level block-pair selection has an $\Ocomplex(N^{4/3})$ compute
+floor: no block-size schedule yields end-to-end linearity, as the quadratic
+only moves between the selection and read stages.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -80,7 +84,7 @@ limiting practical context windows. While FlashAttention
 factor by tiling computations in SRAM, the asymptotic cost remains quadratic.
 
 Content-dependent sparse attention offers a path to genuine sub-quadratic
-scaling by selecting a small subset of key--value blocks per query block.
+scaling by selecting a small subset of key/value blocks per query block.
 Mechanisms such as Native Sparse Attention (NSA)~\cite{yuan2025nsa}, MoBA
 \cite{lu2025moba}, and the Routing Transformer~\cite{roy2021routing} learn to
 route queries to relevant key blocks, reducing the attention cost to
@@ -117,7 +121,7 @@ SRAM, never materializing the gathered tensor.
   (\Cref{sec:triton}).
 \item \textbf{Gate-coupled selector training} with InfoNCE routing loss,
   fixing a collapse failure in centroid-based linear selection
-  (hit $0.19 \to 1.0$) and characterizing the precision--recall tradeoff
+  (hit $0.19 \to 1.0$) and characterizing the precision/recall tradeoff
   (\Cref{sec:centroid}).
 \item An \textbf{end-to-end language model} (45M params, TinyStories
   \cite{eldan2023tinystories}) trained with the fused kernel, achieving val
@@ -126,6 +130,10 @@ SRAM, never materializing the gathered tensor.
   perfect retrieval recall but cannot match block-sparse task accuracy,
   identifying representation quality under coarse routing as the bottleneck
   (\Cref{sec:centroid}).
+\item A \textbf{scaling analysis} isolating selection from the attention read
+  to 16M tokens: the read is linear, but single-level block-pair selection has
+  an $\Ocomplex(N^{4/3})$ floor that no block-size schedule can beat and that
+  exhausts memory before any latency crossover (\Cref{sec:floor}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
@@ -366,7 +374,7 @@ Centroid count ($16 \to 64$) has negligible effect. InfoNCE + cap=8 achieves
 selector parity with block-sparse (hit$=1.0$), but task accuracy is stuck at
 $\sim$0.16 vs.\ block-sparse's 0.77.
 
-\subsection{The Precision--Recall Bottleneck}
+\subsection{The Precision/Recall Bottleneck}
 
 With cap=8, each query block selects $c_{pq} \times \text{cap} + 1 = 17$
 blocks. The needle is always in the set (hit$=$1.0) but surrounded by 12
@@ -430,7 +438,7 @@ contiguity copies.
 \subsection{NIAH (Needle-in-a-Haystack)}
 
 Both models score 0\% on NIAH at $L=512$ (50 samples). This is a model
-capacity limitation (45M params, 3000--5000 steps), not a sparse attention
+capacity limitation (45M params, 3000 to 5000 steps), not a sparse attention
 defect. NIAH retrieval requires 100M+ parameters and 10k+ training steps.
 
 % ─═ 7. Benchmark ══════════════════════════════════════════════════════════
@@ -470,6 +478,62 @@ slower than Triton at 262k. The fused kernel proves the sparse mechanism
 itself is strictly superior to dense at long contexts; the reference
 implementation was the obstacle.
 
+\subsection{Selection vs.\ the Attention Read: the $N^{4/3}$ Floor}
+\label{sec:floor}
+
+The benchmark above measures the fused attention \emph{read}, which is linear.
+The block-pair \emph{selection} (scoring all $n_{\text{blk}}^2$ block pairs,
+\Cref{sec:method}) is not. We isolate the two stages and sweep $L$ to 16M
+tokens across block sizes (\Cref{tab:floor}).
+
+\begin{table}[h]
+\centering
+\caption{Selection (quadratic) vs.\ attention read (linear), isolated.
+$D{=}512$, $H{=}8$, $B_s{=}64$, $k{=}8$, causal, GB10 (130\,GB). ``OOM'': the
+$\Ocomplex(n_{\text{blk}}^2)$ score matrix exceeds memory.}
+\label{tab:floor}
+\small
+\begin{tabular}{rrrr}
+\toprule
+$L$ & Selection (ms) & Read (ms) & Select mem (GB) \\
+\midrule
+262,144 & 5.8 & 17.1 & 0.4 \\
+1,048,576 & 51.2 & 84.7 & 3.0 \\
+4,194,304 & 652.3 & 359.1 & 34.4 \\
+8,388,608 & \textbf{OOM} & 716.0 & $>$130 \\
+16,777,216 & \textbf{OOM} & 1{,}447.6 & $>$130 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Scaling.} Fitting across $L$, the attention read scales with
+exponent $0.96$ to $1.02$ (linear) at every block size, while selection scales
+with exponent $1.5$ to $1.9$ (quadratic, approaching $2$ as $N$ leaves the
+latency floor). Selection latency overtakes the read at $\sim$512k tokens for
+$B_s{=}32$ and $\sim$2M for $B_s{=}64$; for $B_s{=}128$ it stays below the read
+through 8M (ratio $0.17$), crossing over only in the hundreds of millions.
+
+\paragraph{The quadratic dies by OOM, not by latency.} The
+$\Ocomplex(n_{\text{blk}}^2)$ score matrix is a memory wall reached well before
+the latency crossover: it OOMs at 4M ($B_s{=}32$), 8M ($B_s{=}64$), and 16M
+($B_s{=}128$), while the linear read runs to 16M (86\,GB) on the same GPU. In
+practice, quadratic selection becomes impossible to hold, not merely slow.
+
+\paragraph{Variable block size does not rescue linearity.} A natural trick is
+to grow the block with context, $B_s \propto \sqrt{N}$, making selection
+$\Ocomplex((N/\sqrt{N})^2) = \Ocomplex(N)$, linear. We confirm this: along a
+$\sqrt{N}$ schedule ($B_s{=}32,64,128$ at $L{=}$256k, 1M, 4M) the measured
+selection exponent falls to $0.98$. But the read processes $k B_s$ keys per
+query, so it then grows as $N B_s \propto N^{1.5}$ (measured exponent rising to
+$2.3$): the quadratic merely relocates from selection into the read. Writing
+the total as $N^2 s / B_s^2 + N c B_s$ and minimizing over $B_s$ gives
+$B_s \propto N^{1/3}$, at which \emph{both} terms equal $\Ocomplex(N^{4/3})$.
+This $N^{4/3}$ is a floor: \textbf{no block-size schedule makes single-level,
+all-pairs block selection linear end-to-end; the quadratic can be moved between
+stages but not removed.} Genuinely linear selection requires scoring
+$\Ocomplex(C)$ candidates per query (clustering, hashing, or hierarchy), not
+all $n_{\text{blk}}$, the open problem of \Cref{sec:centroid}.
+
 % ─═ 8. Discussion ═════════════════════════════════════════════════════════
 \section{Discussion}\label{sec:discussion}
 
@@ -494,9 +558,10 @@ that, to our knowledge, has not been previously characterized.
 \subsection{Limitations}
 
 \begin{itemize}[leftmargin=*,itemsep=2pt]
-\item The block-pair selection remains $\Ocomplex(n_{\text{blk}}^2)$ -sub-quadratic
-  in $N$ by the constant $B_s^2$, but not genuinely linear. Centroid routing
-  is linear but accuracy-broken.
+\item Single-level block-pair selection is $\Ocomplex(n_{\text{blk}}^2)$ with
+  an $\Ocomplex(N^{4/3})$ floor no block schedule can beat (\Cref{sec:floor});
+  it exhausts memory before any latency crossover. Centroid routing is linear
+  but accuracy-broken.
 \item NIAH requires a larger model; our 45M model is too small.
 \item The backward kernel uses \texttt{atomic\_add} for dK/dV, which may
   serialize under high contention. A split-K or warp-level reduction could
@@ -563,7 +628,7 @@ E.~Lu, Y.~Duan, H.~Hu, W.~Wang, J.~Zhu, H.~Liu, K.~Sun, and T.~Wang.
 A.~Roy, M.~Saffar, A.~Vaswani, and D.~Grangier.
 \newblock Efficient content-based sparse attention with routing transforms.
 \newblock \emph{Transactions of the Association for Computational Linguistics
-  (TACL)}, 9:53--68, 2021.
+  (TACL)}, 9:53-68, 2021.
 
 \bibitem{shazeer2017moe}
 N.~Shazeer, A.~Mirhoseini, K.~Maziarz, A.~Davis, Q.~V.~Le, G.~E.~Hinton, and
@@ -611,7 +676,7 @@ P.~Tillet, H.-T.~Kung, and D.~D.~Cox.
 \newblock {Triton}: An intermediate language and compiler for tiled neural
   network computations.
 \newblock In \emph{Proc.\ 3rd ACM SIGPLAN Int.\ Workshop on Machine Learning
-  and Programming Languages (MAPL)}, pages 10--19, 2019.
+  and Programming Languages (MAPL)}, pages 10-19, 2019.
 
 \bibitem{oord2018infonce}
 A.~van den Oord, Y.~Li, and O.~Vinyals.
