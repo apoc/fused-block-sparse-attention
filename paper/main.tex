@@ -71,6 +71,10 @@ We further isolate selection from the attention read up to 16M tokens and show
 that single-level block-pair selection has an $\Ocomplex(N^{4/3})$ compute
 floor: no block-size schedule yields end-to-end linearity, as the quadratic
 only moves between the selection and read stages.
+A second, lossless linear selector, LSH bucketing, matches block-sparse accuracy
+under supervised routing (0.92 vs.\ 0.96 on MQAR) and far exceeds centroid, but
+its unsupervised (gate-only) training is fragile, leaving reliable linear
+selection without supervision an open problem.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -304,7 +308,7 @@ are made contiguous before the kernel call.
 \end{itemize}
 
 % ─═ 5. Centroid Routing ═══════════════════════════════════════════════════
-\section{Centroid Routing: Linear Selection}\label{sec:centroid}
+\section{Linear Selection: Centroid and LSH}\label{sec:centroid}
 
 Block-pair selection scales as $\Ocomplex(n_{\text{blk}}^2)$. To remove this
 quadratic term, we propose CentroidSSA: route blocks through $C$ learned
@@ -393,6 +397,37 @@ None closed the gap. The bottleneck is \emph{not} routing precision but
 \emph{representation quality}: the coarse centroid routing path shapes the
 attention's q/k/v projections differently than block-sparse's direct pairwise
 scoring, limiting token-level extraction even when the needle block is present.
+
+\subsection{LSH Bucketing: Lossless Refine, Fragile Without Supervision}
+\label{sec:lsh}
+
+Centroid routing loses information in the \emph{representation} (queries are
+compared against lossy cluster summaries). A second linear-time selector, LSH
+bucketing, instead prunes the \emph{search}: block representations are hashed by
+fixed random projections into buckets ($n_{\text{rounds}}$ rounds), a query
+block reads its own bucket, and the candidates are re-scored with the full
+$s_q \cdot s_k$ cosine and truncated to block-sparse's budget, so a selected
+block is scored at full fidelity. Selection is
+$\Ocomplex(n_{\text{blk}} \cdot n_{\text{rounds}} \cdot (n_{\text{buckets}}{+}\text{cap}))$,
+linear in $N$; representations are L2-normalized so routing, gate, and hash all
+act on the same angular quantity.
+
+Under supervised routing, LSH nearly matches block-sparse and far exceeds
+centroid: MQAR accuracy 0.76 vs.\ 0.82 (block-sparse) vs.\ 0.17 (centroid) at
+$n_{\text{blk}}{=}16$, and 0.92 vs.\ 0.96 at $n_{\text{blk}}{=}64$, with recall
+plateauing at hit$\,{=}\,$0.84 (an irreducible hash-collision miss). Linear
+selection \emph{can} therefore preserve accuracy when the representation stays
+lossless, which the lossy centroid path cannot. This is the section's main
+positive result.
+
+The open part is training without supervision. The routing loss above uses the
+known needle block, available only on synthetic MQAR. Under gate coupling alone
+(the regime a real LM must use), LSH is fragile: gate-only recall is highly
+sensitive to the cosine gate temperature (hit 0.09, 0.34, 0.02 at scale 5.66,
+30, 50) and never reaches block-sparse's gate-only level (acc 0.96, hit 0.78),
+while a too-large temperature destabilizes training. We do not have a clean
+account of this gap. Making a lossless-refine linear selector train reliably
+without supervision is, for us, an open problem.
 
 % ─═ 6. Language Model Experiments ═════════════════════════════════════════
 \section{Language Model Experiments}\label{sec:lm}
@@ -578,12 +613,14 @@ speedup at long contexts, while maintaining within-4\% perplexity on a real
 language model. The gate-coupled selector training recipe is simple,
 effective, and requires no separate pre-training stage.
 
-The centroid routing negative result, perfect retrieval recall but degraded
-task accuracy, isolates representation quality under coarse routing as the
-central obstacle to genuinely linear selection, distinct from the
-routing-quality problem that InfoNCE resolves. We believe this distinction is
-useful for future work on sub-quadratic selection: solving the routing
-objective is necessary but not sufficient.
+We probed two linear-time selectors. Centroid routing reaches linear cost and
+perfect recall but degraded accuracy: the obstacle is representation quality
+under coarse routing, not routing recall (InfoNCE resolves the latter). LSH
+bucketing, which prunes the search rather than the representation, matches
+block-sparse accuracy under supervised routing and far exceeds centroid, showing
+a lossless-refine linear selector can preserve accuracy; but its unsupervised
+(gate-only) training proved fragile. Reliable linear selection without needle
+supervision remains open.
 
 Promising directions include scaling to the 100M+ regime where
 needle-in-a-haystack retrieval becomes measurable, extending the kernel to
