@@ -398,7 +398,7 @@ None closed the gap. The bottleneck is \emph{not} routing precision but
 attention's q/k/v projections differently than block-sparse's direct pairwise
 scoring, limiting token-level extraction even when the needle block is present.
 
-\subsection{LSH Bucketing: Lossless Refine, Fragile Without Supervision}
+\subsection{LSH Bucketing: Train Dense, Infer Linear}
 \label{sec:lsh}
 
 Centroid routing loses information in the \emph{representation} (queries are
@@ -450,12 +450,58 @@ Block-sparse routing & \textbf{17.69} & 20.1 & 18.6 & \textbf{17.8} \\
 \end{tabular}
 \end{table}
 
-Across both regimes the message is consistent: the lossless refine fixes the
-\emph{representation} failure that sinks centroids, but hard hashing gives the
-selector no gradient on blocks it does not already collide with, so it does not
-learn to route without supervision. Block-sparse's all-pairs top-$k$ scores
-every block on every step and learns to route in every regime. Reliable
-unsupervised linear selection remains open.
+Across these runs one mechanism recurs: hard hashing gives the selector no
+gradient on blocks it does not already collide with, so when the selector is
+trained \emph{through} the hash it cannot learn to route without supervision,
+while block-sparse's all-pairs top-$k$ scores every block on every step and
+learns to route in every regime.
+
+This points to what the inference-cost-only objective permits: train through the
+dense all-pairs top-$k$ selector (full gradient, identical to block-sparse) and
+swap in LSH bucketing only at inference, on the same normalized representations,
+so the hash never enters the gradient path.
+
+For \emph{retrieval} this works and scales. On MQAR, LSH inference recovers the
+dense-trained selector at a fixed inference budget, and recall holds (even
+improves) as context grows: at 8 rounds and 64 buckets (constant, so inference is
+$\Ocomplex(n_{\text{blk}})$), $n_{\text{blk}}{=}128/256/512$ give hit
+$0.978/0.992/0.994$ (Table~\ref{tab:lsh-scale}). The single needle is reliably
+hashed into the query's bucket.
+
+For \emph{language modeling} it does not. At $n_{\text{blk}}{=}128$ (block 4,
+$L{=}512$, gate only) and a matched attention budget (own block plus top-4), a
+dense selector that scores all blocks reaches 7.9 perplexity, but LSH selecting
+its top-4 from $\sim$16 bucket candidates reaches 113 to 1115 (worse at fewer
+rounds). The dense selector at the same budget succeeds, so this is not a coverage
+floor: LSH's bucketing fails to recall the handful of relevant blocks the dense
+selector finds. A single needle is easy to hash to; the blocks a language model
+needs per query are not, at least with this hash. The apparent unsupervised LM
+recovery held only at near-dense coverage (32 rounds for 32 blocks) and does not
+survive at a sparse budget.
+
+So train-dense / infer-LSH yields a genuinely linear, accuracy-preserving selector
+for needle-style retrieval, but not yet for general language-model attention. The
+open problem is a hash whose recall of content-relevant blocks is high enough for
+the LM at a sparse budget; a bit-based SimHash or learned hash planes are the
+natural next steps.
+
+\begin{table}[h]
+\centering
+\caption{Train dense, infer LSH at a \emph{fixed} inference budget (8 rounds, 64
+buckets, cap 8; $\Ocomplex(n_{\text{blk}})$). Recall holds and improves as context
+grows. MQAR, supervised; oracle is the dense-trained selector.}
+\label{tab:lsh-scale}
+\small
+\begin{tabular}{lccc}
+\toprule
+$n_{\text{blk}}$ & LSH acc & LSH hit & oracle acc \\
+\midrule
+128 & 0.95 & 0.978 & 0.99 \\
+256 & 0.98 & 0.992 & 0.99 \\
+512 & 0.99 & 0.994 & 0.99 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % ─═ 6. Language Model Experiments ═════════════════════════════════════════
 \section{Language Model Experiments}\label{sec:lm}
