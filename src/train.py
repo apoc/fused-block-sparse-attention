@@ -80,7 +80,8 @@ def run(attn, steps, batch, n_pairs, seq_len, d, h, layers, lr, warmup,
             hist.append(rec); print(rec, flush=True)
     # final eval at full difficulty — train config
     m.eval()
-    toks, tgt, npos = D.make_batch(1024, n_pairs, seq_len, device)
+    eval_bs = 1024 if seq_len <= 1024 else 256   # cap eval batch at long seq to avoid OOM
+    toks, tgt, npos = D.make_batch(eval_bs, n_pairs, seq_len, device)
     def _eval():
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
             lg = m(toks, needle_pos=npos)
@@ -90,9 +91,12 @@ def run(attn, steps, batch, n_pairs, seq_len, d, h, layers, lr, warmup,
     if attn == "lsh":
         m.set_dense_select(False)              # LSH bucketing at inference (linear)
         acc_lsh, hit_lsh = _eval()
-        # inference-rounds/buckets sweep (R unused during dense training -> free to retune; still linear)
+        # inference rounds sweep at FIXED n_buckets (constant -> argmax hashing is
+        # O(nblk * rounds * buckets) = linear, refine is O(nblk * rounds * cap)). R is
+        # unused during dense training, so retuning at inference is free. Bucket size
+        # nblk/buckets stays <= cap over the tested nblk range (no truncation).
         lsh_sweep = {}
-        for nr, nb in [(4, 8), (8, 8), (16, 8), (8, 4), (16, 4), (32, 4)]:
+        for nr, nb in [(4, 64), (8, 64), (16, 64), (32, 64), (8, 128), (16, 128)]:
             for b in m.blocks:
                 at = b["attn"]
                 if hasattr(at, "R"):
