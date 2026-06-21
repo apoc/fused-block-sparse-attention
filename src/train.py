@@ -15,6 +15,8 @@ def run(attn, steps, batch, n_pairs, seq_len, d, h, layers, lr, warmup,
         kw.update(n_rounds=n_rounds, n_buckets=n_buckets, cap=cap, scale=lsh_scale)
     m = TinyTransformer(D.VOCAB, D.NV, d=d, h=h, layers=layers, max_len=seq_len+8,
                         attn=attn, **kw).to(device)
+    if attn == "lsh":
+        m.set_dense_select(True)   # train with dense all-pairs top-k; LSH only at inference
     opt = torch.optim.AdamW(m.parameters(), lr=lr, betas=(0.9, 0.95), weight_decay=0.01)
     def lr_at(s):
         if s < warmup: return lr * (s + 1) / warmup
@@ -78,24 +80,39 @@ def run(attn, steps, batch, n_pairs, seq_len, d, h, layers, lr, warmup,
             hist.append(rec); print(rec, flush=True)
     # final eval at full difficulty — train config
     m.eval()
-    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
-        toks, tgt, npos = D.make_batch(1024, n_pairs, seq_len, device)
-        logits = m(toks, needle_pos=npos)
-        acc0 = (logits.argmax(-1) == tgt).float().mean().item()
-        hit0 = m.selection_hit()
-    # also eval with a DIFFERENT refine_topk (train-high / inference-low)
+    toks, tgt, npos = D.make_batch(1024, n_pairs, seq_len, device)
+    def _eval():
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
+            lg = m(toks, needle_pos=npos)
+            return (lg.argmax(-1) == tgt).float().mean().item(), m.selection_hit()
+    acc0, hit0 = _eval()                       # lsh: dense_select=True (oracle for the trained reps)
+    acc_lsh, hit_lsh, lsh_sweep = None, None, None
+    if attn == "lsh":
+        m.set_dense_select(False)              # LSH bucketing at inference (linear)
+        acc_lsh, hit_lsh = _eval()
+        # inference-rounds/buckets sweep (R unused during dense training -> free to retune; still linear)
+        lsh_sweep = {}
+        for nr, nb in [(4, 8), (8, 8), (16, 8), (8, 4), (16, 4), (32, 4)]:
+            for b in m.blocks:
+                at = b["attn"]
+                if hasattr(at, "R"):
+                    at.n_rounds, at.n_buckets = nr, nb
+                    at.R = torch.randn(at.sel_dim, nr, nb, device=device)
+            ac, hi = _eval()
+            lsh_sweep[f"{nr}r{nb}b"] = [round(ac, 4), None if hi is None else round(hi, 4)]
+        m.set_dense_select(True)
     acc1, hit1 = None, None
     if attn == "centroid" and eval_refine_topk is not None:
         for b in m.blocks:
             if hasattr(b["attn"], "refine_topk"):
                 b["attn"].refine_topk = eval_refine_topk
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
-            logits_r = m(toks, needle_pos=npos)
-            acc1 = (logits_r.argmax(-1) == tgt).float().mean().item()
-            hit1 = m.selection_hit()
+        acc1, hit1 = _eval()
     final = {"final_acc": round(acc0, 4), "final_hit": None if hit0 is None else round(hit0, 4),
+             "lsh_acc": None if acc_lsh is None else round(acc_lsh, 4),
+             "lsh_hit": None if hit_lsh is None else round(hit_lsh, 4),
              "refine_acc": None if acc1 is None else round(acc1, 4),
-             "refine_hit": None if hit1 is None else round(hit1, 4)}
+             "refine_hit": None if hit1 is None else round(hit1, 4),
+             "lsh_sweep": lsh_sweep}
     print("FINAL", final, flush=True)
     return {"attn": attn, "gate": gate, "route_lambda": route_lambda,
             "balance_lambda": balance_lambda, "history": hist, **final}

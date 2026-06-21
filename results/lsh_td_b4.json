@@ -1,0 +1,67 @@
+{
+  "attn": "lsh",
+  "gate": true,
+  "route_lambda": 1.0,
+  "balance_lambda": 0.0,
+  "history": [
+    {
+      "step": 0,
+      "loss": 4.4666,
+      "acc": 0.0,
+      "hit": 0.3281,
+      "route": 5.0819,
+      "pairs": 2,
+      "sec": 1.0
+    },
+    {
+      "step": 3000,
+      "loss": 0.0122,
+      "acc": 1.0,
+      "hit": 1.0,
+      "route": 0.1492,
+      "pairs": 8,
+      "sec": 256.4
+    },
+    {
+      "step": 5999,
+      "loss": 0.0017,
+      "acc": 1.0,
+      "hit": 1.0,
+      "route": 0.1308,
+      "pairs": 8,
+      "sec": 528.7
+    }
+  ],
+  "final_acc": 0.9893,
+  "final_hit": 1.0,
+  "lsh_acc": 0.9385,
+  "lsh_hit": 0.9746,
+  "refine_acc": null,
+  "refine_hit": null,
+  "lsh_sweep": {
+    "4r8b": [
+      0.876,
+      0.9321
+    ],
+    "8r8b": [
+      0.9893,
+      0.999
+    ],
+    "16r8b": [
+      0.9883,
+      0.9985
+    ],
+    "8r4b": [
+      0.9844,
+      0.998
+    ],
+    "16r4b": [
+      0.9893,
+      0.9995
+    ],
+    "32r4b": [
+      0.9873,
+      0.9976
+    ]
+  }
+}

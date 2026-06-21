@@ -364,6 +364,7 @@ class LSHBucketSSA(nn.Module):
         self.scale = float(sel_dim ** 0.5) if scale is None else float(scale)  # gate/route cosine temperature
         self.n_rounds, self.n_buckets, self.cap = n_rounds, n_buckets, cap
         self.gate, self.causal = gate, causal
+        self.dense_select = False  # train: dense all-pairs top-k (allowed); eval: LSH bucketing
         self.register_buffer("R", torch.randn(sel_dim, n_rounds, n_buckets))
         self.last_hit = None
         self.last_block_logits = None
@@ -393,42 +394,52 @@ class LSHBucketSSA(nn.Module):
         # route-loss hook: dense scores for the LAST query block only, O(nblk)
         self.last_block_logits = self.scale * torch.bmm(sk, sq[:, nblk - 1:nblk].transpose(-1, -2)).squeeze(-1)
 
-        # ---- LSH bucketing (fixed random R), O(nblk * R_ * NB) ----
-        kbucket = torch.einsum("bns,src->bnrc", sk, self.R).argmax(-1)  # (B,nblk,R_)
-        qbucket = torch.einsum("bns,src->bnrc", sq, self.R).argmax(-1)  # (B,nblk,R_)
-        bI = torch.arange(B, device=dev).view(B, 1).expand(B, nblk)
-        jI = diag.view(1, nblk).expand(B, nblk)
-        cands = []
-        for r in range(R_):
-            kb_r, qb_r = kbucket[..., r], qbucket[..., r]
-            oh = F.one_hot(kb_r, NB)
-            within = (oh.cumsum(1) - oh).gather(2, kb_r.unsqueeze(-1)).squeeze(-1)
-            keep = within < cap
-            buckets = torch.full((B, NB, cap), -1, dtype=torch.long, device=dev)
-            buckets[bI[keep], kb_r[keep], within[keep]] = jI[keep]
-            cands.append(torch.gather(buckets, 1, qb_r.unsqueeze(-1).expand(B, nblk, cap)))
-        cand = torch.cat(cands, dim=-1)                               # (B,nblk,P) ids, -1=empty
-        P = cand.shape[-1]
-        valid = cand >= 0
-        cand_c = cand.clamp(min=0)
-        # dedup across rounds (P is constant, so this stays linear in nblk)
-        eq = cand_c.unsqueeze(-1) == cand_c.unsqueeze(-2)
-        lower = torch.tril(torch.ones(P, P, dtype=torch.bool, device=dev), -1)
-        valid = valid & ~(eq & lower).any(-1)
-
-        # ---- full-fidelity refine to fixed budget (parity with block-sparse) ----
-        bb = torch.arange(B, device=dev).view(B, 1, 1)
-        sk_cand = sk[bb, cand_c]                                       # (B,nblk,P,s)
-        score = self.scale * (sq.unsqueeze(2) * sk_cand).sum(-1)       # (B,nblk,P) cosine*scale
-        score = score.masked_fill(~valid, float("-inf"))
-        score = score.masked_fill(cand_c == diag.view(1, nblk, 1), float("-inf"))  # own added below
-        if self.causal:
-            score = score.masked_fill(cand_c > diag.view(1, nblk, 1), float("-inf"))
-        kk_c = min(self.topk, max(1, nblk - 1))
-        rk = min(kk_c, P)
-        topv, topi = score.topk(rk, dim=-1)
-        sel_content = torch.gather(cand_c, -1, topi)                  # (B,nblk,rk)
-        cont_valid = torch.isfinite(topv)
+        if self.dense_select:
+            # train-time dense all-pairs selection (O(nblk^2), allowed at train time).
+            # Same normalized-cosine geometry + gate as the LSH path below.
+            raw = self.scale * (sq @ sk.transpose(-1, -2))                # (B,nblk,nblk)
+            raw = raw.masked_fill(diag.view(1, nblk, 1) == diag.view(1, 1, nblk), float("-inf"))
+            if self.causal:
+                raw = raw.masked_fill(diag.view(1, 1, nblk) > diag.view(1, nblk, 1), float("-inf"))
+            kk_c = min(self.topk, max(1, nblk - 1))
+            topv, topi = raw.topk(kk_c, dim=-1)
+            sel_content = topi                                           # top-k indices ARE block ids
+            cont_valid = torch.isfinite(topv)
+        else:
+            # ---- LSH bucketing (fixed random R), O(nblk * R_ * NB) ----
+            kbucket = torch.einsum("bns,src->bnrc", sk, self.R).argmax(-1)  # (B,nblk,R_)
+            qbucket = torch.einsum("bns,src->bnrc", sq, self.R).argmax(-1)  # (B,nblk,R_)
+            bI = torch.arange(B, device=dev).view(B, 1).expand(B, nblk)
+            jI = diag.view(1, nblk).expand(B, nblk)
+            cands = []
+            for r in range(R_):
+                kb_r, qb_r = kbucket[..., r], qbucket[..., r]
+                oh = F.one_hot(kb_r, NB)
+                within = (oh.cumsum(1) - oh).gather(2, kb_r.unsqueeze(-1)).squeeze(-1)
+                keep = within < cap
+                buckets = torch.full((B, NB, cap), -1, dtype=torch.long, device=dev)
+                buckets[bI[keep], kb_r[keep], within[keep]] = jI[keep]
+                cands.append(torch.gather(buckets, 1, qb_r.unsqueeze(-1).expand(B, nblk, cap)))
+            cand = torch.cat(cands, dim=-1)                               # (B,nblk,P) ids, -1=empty
+            P = cand.shape[-1]
+            valid = cand >= 0
+            cand_c = cand.clamp(min=0)
+            # dedup across rounds (P is constant, so this stays linear in nblk)
+            eq = cand_c.unsqueeze(-1) == cand_c.unsqueeze(-2)
+            lower = torch.tril(torch.ones(P, P, dtype=torch.bool, device=dev), -1)
+            valid = valid & ~(eq & lower).any(-1)
+            bb = torch.arange(B, device=dev).view(B, 1, 1)
+            sk_cand = sk[bb, cand_c]                                       # (B,nblk,P,s)
+            score = self.scale * (sq.unsqueeze(2) * sk_cand).sum(-1)       # (B,nblk,P) cosine*scale
+            score = score.masked_fill(~valid, float("-inf"))
+            score = score.masked_fill(cand_c == diag.view(1, nblk, 1), float("-inf"))  # own added below
+            if self.causal:
+                score = score.masked_fill(cand_c > diag.view(1, nblk, 1), float("-inf"))
+            kk_c = min(self.topk, max(1, nblk - 1))
+            rk = min(kk_c, P)
+            topv, topi = score.topk(rk, dim=-1)
+            sel_content = torch.gather(cand_c, -1, topi)                  # (B,nblk,rk)
+            cont_valid = torch.isfinite(topv)
 
         own = diag.view(1, nblk, 1).expand(B, nblk, 1)
         own_score = self.scale * (sq * sk).sum(-1, keepdim=True)       # (B,nblk,1)
@@ -503,6 +514,11 @@ class TinyTransformer(nn.Module):
             x = x + b["attn"](b["ln1"](x), needle_pos=needle_pos)
             x = x + b["mlp"](b["ln2"](x))
         return self.head(x[:, -1])
+
+    def set_dense_select(self, flag):
+        for b in self.blocks:
+            if hasattr(b["attn"], "dense_select"):
+                b["attn"].dense_select = flag
 
     def selection_hit(self):
         hs = [b["attn"].last_hit for b in self.blocks

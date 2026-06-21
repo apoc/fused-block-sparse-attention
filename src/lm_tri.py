@@ -64,6 +64,18 @@ class CausalLM(nn.Module):
                 ls.append(-(a.distill_target.float() * lp).sum(-1).mean())
         return sum(ls) / len(ls) if ls else torch.zeros((), device=self.head.weight.device)
 
+    def set_dense_select(self, flag):
+        for b in self.blocks:
+            if hasattr(b.attn, "dense_select"):
+                b.attn.dense_select = flag
+
+    def set_lsh_rounds(self, nr, nb, device):
+        for b in self.blocks:
+            a = b.attn
+            if hasattr(a, "R"):
+                a.n_rounds, a.n_buckets = nr, nb
+                a.R = torch.randn(a.sel_dim, nr, nb, device=device)
+
 
 def get_batch(data, bs, L, device):
     ix = torch.randint(0, len(data) - L - 1, (bs,))
@@ -120,6 +132,8 @@ def main():
     else:
         kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate, use_triton=a.use_triton)
     m = CausalLM(a.vocab, a.d, a.h, a.layers, max_len=a.L + 8, attn=a.attn, **kw).to(dev)
+    if a.attn == "lsh":
+        m.set_dense_select(True)   # train dense all-pairs top-k; LSH only at inference
     nparams = sum(p.numel() for p in m.parameters())
     print(f"params: {nparams/1e6:.1f}M")
 
@@ -142,7 +156,20 @@ def main():
             print({"step": s, "ce": round(ce.item(), 4),
                    "lr": round(lr_at(s), 6), "sec": round(time.time() - t0, 1)}, flush=True)
 
-    val_loss = evaluate(m, val, a.bs, a.L, dev)
+    def _ppl():
+        return round(math.exp(evaluate(m, val, a.bs, a.L, dev)), 3)
+    lsh_sweep = None
+    if a.attn == "lsh":
+        m.set_dense_select(True)
+        val_loss = evaluate(m, val, a.bs, a.L, dev)   # dense oracle
+        m.set_dense_select(False)                      # LSH inference (linear)
+        lsh_sweep = {}
+        for nr, nb in [(8, 8), (16, 8), (16, 4), (32, 4)]:
+            m.set_lsh_rounds(nr, nb, dev)
+            lsh_sweep[f"{nr}r{nb}b"] = _ppl()
+        m.set_dense_select(True)
+    else:
+        val_loss = evaluate(m, val, a.bs, a.L, dev)
     ppl_by_len = {}
     for el in [128, 256, 512, 1024]:
         if el <= a.L:
@@ -151,6 +178,7 @@ def main():
     res = {"attn": a.attn, "use_triton": a.use_triton, "gate": a.gate,
            "params": nparams, "val_loss": round(val_loss, 4),
            "val_ppl": round(math.exp(val_loss), 3), "ppl_by_len": ppl_by_len,
+           "lsh_sweep": lsh_sweep,
            "steps": a.steps, "L": a.L, "d": a.d, "layers": a.layers}
     print("FINAL", json.dumps(res), flush=True)
     json.dump(res, open(a.out, "w"), indent=2)
