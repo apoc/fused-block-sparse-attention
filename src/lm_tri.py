@@ -164,7 +164,7 @@ def main():
         val_loss = evaluate(m, val, a.bs, a.L, dev)   # dense oracle
         m.set_dense_select(False)                      # LSH inference (linear)
         lsh_sweep = {}
-        for nr, nb in [(8, 8), (16, 8), (16, 4), (32, 4)]:
+        for nr, nb in [(4, 64), (8, 64), (16, 64), (32, 64)]:
             m.set_lsh_rounds(nr, nb, dev)
             lsh_sweep[f"{nr}r{nb}b"] = _ppl()
         m.set_dense_select(True)
