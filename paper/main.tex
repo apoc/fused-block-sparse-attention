@@ -73,8 +73,8 @@ floor: no block-size schedule yields end-to-end linearity, as the quadratic
 only moves between the selection and read stages.
 A second, lossless linear selector, LSH bucketing, matches block-sparse accuracy
 under supervised routing (0.92 vs.\ 0.96 on MQAR) and far exceeds centroid, but
-its unsupervised (gate-only) training is fragile, leaving reliable linear
-selection without supervision an open problem.
+its unsupervised (gate-only) routing is inert in a 45M language model, matching a
+no-routing baseline, leaving reliable unsupervised linear selection open.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -421,13 +421,41 @@ lossless, which the lossy centroid path cannot. This is the section's main
 positive result.
 
 The open part is training without supervision. The routing loss above uses the
-known needle block, available only on synthetic MQAR. Under gate coupling alone
-(the regime a real LM must use), LSH is fragile: gate-only recall is highly
-sensitive to the cosine gate temperature (hit 0.09, 0.34, 0.02 at scale 5.66,
-30, 50) and never reaches block-sparse's gate-only level (acc 0.96, hit 0.78),
-while a too-large temperature destabilizes training. We do not have a clean
-account of this gap. Making a lossless-refine linear selector train reliably
-without supervision is, for us, an open problem.
+known needle block, available only on synthetic MQAR. We tested the unsupervised
+regime two ways. On MQAR under gate coupling alone, LSH is fragile: recall is
+highly sensitive to the cosine gate temperature (hit 0.09, 0.34, 0.02 at scale
+5.66, 30, 50) and never reaches block-sparse's gate-only level (acc 0.96, hit
+0.78). On a real language model (TinyStories, 45M, gate coupling only) the result
+is sharper (Table~\ref{tab:lsh-lm}): gate-only LSH reaches the \emph{same}
+perplexity as own-block-only attention (no routing), and its perplexity does not
+improve with context length, whereas block-sparse beats the local baseline by
+3.7 perplexity and improves with length. LSH attends to five blocks but adds
+nothing over attending to one: its content routing is inert.
+
+\begin{table}[h]
+\centering
+\caption{Gate-only TinyStories (45M, $B_s{=}16$, $L{=}512$, 3000 steps).
+Local-only is top-$k{=}0$ (own block, no routing). LSH matches the no-routing
+baseline; only block-sparse routing helps and improves with length.}
+\label{tab:lsh-lm}
+\small
+\begin{tabular}{lcccc}
+\toprule
+ & val PPL & PPL@128 & PPL@256 & PPL@512 \\
+\midrule
+Local-only (no routing) & 21.43 & 20.7 & 20.6 & 21.7 \\
+LSH (linear routing) & 21.49 & 21.0 & 21.0 & 21.7 \\
+Block-sparse routing & \textbf{17.69} & 20.1 & 18.6 & \textbf{17.8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across both regimes the message is consistent: the lossless refine fixes the
+\emph{representation} failure that sinks centroids, but hard hashing gives the
+selector no gradient on blocks it does not already collide with, so it does not
+learn to route without supervision. Block-sparse's all-pairs top-$k$ scores
+every block on every step and learns to route in every regime. Reliable
+unsupervised linear selection remains open.
 
 % ─═ 6. Language Model Experiments ═════════════════════════════════════════
 \section{Language Model Experiments}\label{sec:lm}
@@ -619,8 +647,8 @@ under coarse routing, not routing recall (InfoNCE resolves the latter). LSH
 bucketing, which prunes the search rather than the representation, matches
 block-sparse accuracy under supervised routing and far exceeds centroid, showing
 a lossless-refine linear selector can preserve accuracy; but its unsupervised
-(gate-only) training proved fragile. Reliable linear selection without needle
-supervision remains open.
+routing proved inert, matching a no-routing baseline on a 45M language model.
+Reliable unsupervised linear selection remains open.
 
 Promising directions include scaling to the 100M+ regime where
 needle-in-a-haystack retrieval becomes measurable, extending the kernel to
