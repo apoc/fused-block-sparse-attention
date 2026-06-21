@@ -1,0 +1,17 @@
+{
+  "attn": "lsh",
+  "use_triton": false,
+  "gate": true,
+  "params": 45122816,
+  "val_loss": 3.0674,
+  "val_ppl": 21.487,
+  "ppl_by_len": {
+    "128": 20.96,
+    "256": 21.003,
+    "512": 21.665
+  },
+  "steps": 3000,
+  "L": 512,
+  "d": 512,
+  "layers": 6
+}

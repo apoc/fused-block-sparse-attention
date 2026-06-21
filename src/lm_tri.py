@@ -2,7 +2,7 @@
 and reports validation perplexity + ppl-vs-context. Uses Triton fused kernel
 for training and inference when --use_triton is set."""
 import argparse, time, math, json, struct, torch, torch.nn as nn, torch.nn.functional as F
-from ssa_model import DenseAttention, BlockSparseSSA
+from ssa_model import DenseAttention, BlockSparseSSA, LSHBucketSSA
 
 
 def load_tokens(path):
@@ -29,6 +29,8 @@ class Block(nn.Module):
 def _make_attn(d, h, attn, kw):
     if attn == "dense":
         return DenseAttention(d, h, causal=True)
+    if attn == "lsh":
+        return LSHBucketSSA(d, h, causal=True, **kw)
     return BlockSparseSSA(d, h, causal=True, **kw)
 
 
@@ -85,7 +87,7 @@ def evaluate(m, val, bs, L, device, iters=40):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--attn", choices=["dense", "sparse"], default="dense")
+    p.add_argument("--attn", choices=["dense", "sparse", "lsh"], default="dense")
     p.add_argument("--steps", type=int, default=5000)
     p.add_argument("--bs", type=int, default=16)
     p.add_argument("--L", type=int, default=512)
@@ -96,6 +98,9 @@ def main():
     p.add_argument("--warmup", type=int, default=200)
     p.add_argument("--block", type=int, default=64)
     p.add_argument("--topk", type=int, default=4)
+    p.add_argument("--n_rounds", type=int, default=4, help="LSH hash rounds")
+    p.add_argument("--n_buckets", type=int, default=8, help="LSH buckets per round")
+    p.add_argument("--cap", type=int, default=8, help="LSH bucket capacity")
     p.add_argument("--gate", action="store_true")
     p.add_argument("--use_triton", action="store_true")
     p.add_argument("--data", default="../tinystories.bin")
@@ -109,7 +114,11 @@ def main():
     train, val = data[:n_train], data[n_train:]
     print(f"train: {len(train)} val: {len(val)} tokens")
 
-    kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate, use_triton=a.use_triton)
+    if a.attn == "lsh":
+        kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate,
+                  n_rounds=a.n_rounds, n_buckets=a.n_buckets, cap=a.cap)
+    else:
+        kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate, use_triton=a.use_triton)
     m = CausalLM(a.vocab, a.d, a.h, a.layers, max_len=a.L + 8, attn=a.attn, **kw).to(dev)
     nparams = sum(p.numel() for p in m.parameters())
     print(f"params: {nparams/1e6:.1f}M")

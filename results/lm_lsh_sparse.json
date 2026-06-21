@@ -1,0 +1,17 @@
+{
+  "attn": "sparse",
+  "use_triton": false,
+  "gate": true,
+  "params": 45122816,
+  "val_loss": 2.8728,
+  "val_ppl": 17.686,
+  "ppl_by_len": {
+    "128": 20.104,
+    "256": 18.581,
+    "512": 17.837
+  },
+  "steps": 3000,
+  "L": 512,
+  "d": 512,
+  "layers": 6
+}

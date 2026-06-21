@@ -453,7 +453,7 @@ class LSHBucketSSA(nn.Module):
             gbias = F.logsigmoid(gscore).masked_fill(~sval, 0.0)
             add = add + gbias.view(B, 1, nblk, kk).to(qB.dtype)
         if self.causal:
-            NEG = torch.finfo(torch.float32).min
+            NEG = float("-inf")   # bf16-safe (finfo(float32).min overflows bf16 under autocast)
             tri = torch.zeros(Bs, kk * Bs, device=dev, dtype=qB.dtype)
             tri[:, :Bs] = torch.triu(torch.full((Bs, Bs), NEG, device=dev, dtype=qB.dtype), 1)
             attn_mask = (add.repeat_interleave(Bs, dim=-1).reshape(B, H, nblk, 1, kk * Bs)
