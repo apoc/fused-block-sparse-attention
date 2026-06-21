@@ -153,6 +153,18 @@ Reformer~\cite{kitaev2020reformer}, Sparse Sinkhorn Attention
 \cite{tay2020sinkhorn}, NSA~\cite{yuan2025nsa}, MoBA~\cite{lu2025moba} -learn
 to select relevant blocks but face the selector-gradient problem.
 
+\paragraph{Inference-time sparse selection.}
+A parallel line keeps a dense-trained model and sparsifies only at inference,
+selecting a query-dependent subset of the KV cache: Quest~\cite{tang2024quest}
+(top-$k$ pages), H2O~\cite{zhang2023h2o} (heavy-hitter eviction), and
+RetrievalAttention~\cite{liu2024retrievalattention} (attention-aware ANN over
+keys, which reports that plain LSH/ANN underperforms because attention queries
+are out-of-distribution). LSH-E~\cite{rabbani2024lshe} uses SimHash for KV
+eviction, and DASH-KV~\cite{guo2026dashkv} replaces LSH with a \emph{learned}
+asymmetric hash, reporting higher retrieval recall than parameter-free LSH. Our
+train-dense / infer-LSH study (\Cref{sec:lsh}) sits in this regime, at block
+rather than token granularity and at small scale.
+
 \paragraph{Selector training.}
 NSA trains the selector by distilling dense per-block attention mass.
 MoBA uses a gating mechanism. Sparse Sinkhorn Attention
@@ -403,7 +415,7 @@ scoring, limiting token-level extraction even when the needle block is present.
 
 Centroid routing loses information in the \emph{representation} (queries are
 compared against lossy cluster summaries). A second linear-time selector, LSH
-bucketing, instead prunes the \emph{search}: block representations are hashed by
+bucketing~\cite{kitaev2020reformer}, instead prunes the \emph{search}: block representations are hashed by
 fixed random projections into buckets ($n_{\text{rounds}}$ rounds), a query
 block reads its own bucket, and the candidates are re-scored with the full
 $s_q \cdot s_k$ cosine and truncated to block-sparse's budget, so a selected
@@ -482,8 +494,10 @@ survive at a sparse budget.
 So train-dense / infer-LSH yields a genuinely linear, accuracy-preserving selector
 for needle-style retrieval, but not yet for general language-model attention. The
 open problem is a hash whose recall of content-relevant blocks is high enough for
-the LM at a sparse budget; a bit-based SimHash or learned hash planes are the
-natural next steps.
+the LM at a sparse budget; a bit-based SimHash~\cite{rabbani2024lshe} or a learned
+hash~\cite{guo2026dashkv} (both used for token-level KV retrieval, the latter
+reporting higher recall than plain LSH) are the natural next steps for the
+block-level selector.
 
 \begin{table}[h]
 \centering
@@ -799,6 +813,40 @@ S.~Arora, S.~Gopi, N.~Ingster, and P.~Nakkiran.
 \newblock Simple, fast, and practically good: A simple {LLM}-based sparse
   retrieval model for {MQAR}.
 \newblock 2024.
+
+\bibitem{tang2024quest}
+J.~Tang, Y.~Zhao, K.~Zhu, G.~Xiao, B.~Kasikci, and S.~Han.
+\newblock {Quest}: Query-aware sparsity for efficient long-context {LLM}
+  inference.
+\newblock In \emph{ICML}, 2024. arXiv:2406.10774.
+
+\bibitem{zhang2023h2o}
+Z.~Zhang, Y.~Sheng, T.~Zhou, T.~Chen, L.~Zheng, R.~Cai, Z.~Song, Y.~Tian,
+  C.~R\'e, C.~Barrett, Z.~Wang, and B.~Chen.
+\newblock {H2O}: Heavy-hitter oracle for efficient generative inference of large
+  language models.
+\newblock In \emph{NeurIPS}, 2023. arXiv:2306.14048.
+
+\bibitem{liu2024retrievalattention}
+D.~Liu, M.~Chen, B.~Lu, H.~Jiang, Z.~Han, Q.~Zhang, Q.~Chen, C.~Zhang, B.~Ding,
+  K.~Zhang, C.~Chen, F.~Yang, Y.~Yang, and L.~Qiu.
+\newblock {RetrievalAttention}: Accelerating long-context {LLM} inference via
+  vector retrieval.
+\newblock \emph{arXiv preprint} arXiv:2409.10516, 2024.
+
+\bibitem{rabbani2024lshe}
+T.~Rabbani, M.~Liu, T.~O'Halloran, A.~Sankaralingam, M.-A.~Hartley, and
+  F.~Huang.
+\newblock {LSH-E}: An adaptive locality-sensitive strategy for {KV} cache
+  compression.
+\newblock In \emph{NeurIPS}, 2024.
+
+\bibitem{guo2026dashkv}
+J.~Guo, Z.~Zhang, J.~Xie, M.~T.~Iqbal, D.~Han, L.-H.~Lee, S.-H.~Bae, J.~Zou,
+  Y.~Yang, and C.~Zhang.
+\newblock {DASH-KV}: Accelerating long-context {LLM} inference via asymmetric
+  {KV} cache hashing.
+\newblock \emph{arXiv preprint} arXiv:2604.19351, 2026.
 
 \end{thebibliography}
 
