@@ -352,7 +352,8 @@ class LSHBucketSSA(nn.Module):
     Higher sq.sk similarity -> higher LSH collision probability -> better recall.
     """
     def __init__(self, d, h, block=32, topk=4, sel_dim=32, n_rounds=4,
-                 n_buckets=8, cap=8, gate=False, causal=False, scale=None):
+                 n_buckets=8, cap=8, gate=False, causal=False, scale=None,
+                 learn_hash=False, hash_tau=1.0):
         super().__init__()
         self.h, self.dh = h, d // h
         self.block, self.topk = block, topk
@@ -365,9 +366,15 @@ class LSHBucketSSA(nn.Module):
         self.n_rounds, self.n_buckets, self.cap = n_rounds, n_buckets, cap
         self.gate, self.causal = gate, causal
         self.dense_select = False  # train: dense all-pairs top-k (allowed); eval: LSH bucketing
-        self.register_buffer("R", torch.randn(sel_dim, n_rounds, n_buckets))
+        self.learn_hash, self.hash_tau = learn_hash, hash_tau
+        R0 = torch.randn(sel_dim, n_rounds, n_buckets)
+        if learn_hash:
+            self.R = nn.Parameter(R0)          # learned hash planes (DASH-KV-style)
+        else:
+            self.register_buffer("R", R0)      # fixed random LSH (Reformer-style)
         self.last_hit = None
         self.last_block_logits = None
+        self.last_hash_loss = None
 
     def forward(self, x, needle_pos=None):
         B, L, D = x.shape
@@ -405,6 +412,24 @@ class LSHBucketSSA(nn.Module):
             topv, topi = raw.topk(kk_c, dim=-1)
             sel_content = topi                                           # top-k indices ARE block ids
             cont_valid = torch.isfinite(topv)
+            if self.learn_hash and self.training:
+                # learned-hash alignment (self-distilled LSH): pull the dense-selected
+                # (relevant) key blocks to COLLIDE with their query block under R, via a
+                # soft-collision InfoNCE. Train-only; O(nblk^2) like dense_select itself.
+                pq = F.softmax(torch.einsum("bns,src->bnrc", sq, self.R) / self.hash_tau, -1)
+                pk = F.softmax(torch.einsum("bns,src->bnrc", sk, self.R) / self.hash_tau, -1)
+                coll = torch.einsum("birc,bjrc->bij", pq, pk)            # (B,nblk,nblk) E[#collisions]
+                cmask = (diag.view(1, 1, nblk) < diag.view(1, nblk, 1)) if self.causal \
+                    else (diag.view(1, 1, nblk) != diag.view(1, nblk, 1))
+                cmask = cmask.expand(B, nblk, nblk)
+                pos = torch.zeros(B, nblk, nblk, device=dev)
+                pos.scatter_(2, sel_content, cont_valid.float())
+                pos = (pos > 0.5) & cmask
+                logit = coll.masked_fill(~cmask, float("-inf"))
+                numer = torch.logsumexp(logit.masked_fill(~pos, float("-inf")), -1)
+                denom = torch.logsumexp(logit, -1)
+                hp = pos.any(-1)
+                self.last_hash_loss = (denom - numer)[hp].mean() if hp.any() else None
         else:
             # ---- LSH bucketing (fixed random R), O(nblk * R_ * NB) ----
             kbucket = torch.einsum("bns,src->bnrc", sk, self.R).argmax(-1)  # (B,nblk,R_)

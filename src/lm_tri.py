@@ -45,6 +45,7 @@ class CausalLM(nn.Module):
         # weight tying
         self.head.weight = self.tok.weight
         self.sparse_attns = [b.attn for b in self.blocks if isinstance(b.attn, BlockSparseSSA)]
+        self.lsh_attns = [b.attn for b in self.blocks if isinstance(b.attn, LSHBucketSSA)]
 
     def forward(self, idx):
         x = self.tok(idx) + self.pos[:, :idx.size(1)]
@@ -64,6 +65,10 @@ class CausalLM(nn.Module):
                 ls.append(-(a.distill_target.float() * lp).sum(-1).mean())
         return sum(ls) / len(ls) if ls else torch.zeros((), device=self.head.weight.device)
 
+    def hash_loss(self):
+        ls = [a.last_hash_loss for a in self.lsh_attns if a.last_hash_loss is not None]
+        return sum(ls) / len(ls) if ls else torch.zeros((), device=self.head.weight.device)
+
     def set_dense_select(self, flag):
         for b in self.blocks:
             if hasattr(b.attn, "dense_select"):
@@ -72,7 +77,7 @@ class CausalLM(nn.Module):
     def set_lsh_rounds(self, nr, nb, device):
         for b in self.blocks:
             a = b.attn
-            if hasattr(a, "R"):
+            if hasattr(a, "R") and not isinstance(a.R, nn.Parameter):
                 a.n_rounds, a.n_buckets = nr, nb
                 a.R = torch.randn(a.sel_dim, nr, nb, device=device)
 
@@ -113,6 +118,8 @@ def main():
     p.add_argument("--n_rounds", type=int, default=4, help="LSH hash rounds")
     p.add_argument("--n_buckets", type=int, default=8, help="LSH buckets per round")
     p.add_argument("--cap", type=int, default=8, help="LSH bucket capacity")
+    p.add_argument("--learn_hash", action="store_true", help="learned hash planes + alignment loss")
+    p.add_argument("--lambda_h", type=float, default=1.0, help="hash-alignment loss weight")
     p.add_argument("--gate", action="store_true")
     p.add_argument("--use_triton", action="store_true")
     p.add_argument("--data", default="../tinystories.bin")
@@ -128,7 +135,8 @@ def main():
 
     if a.attn == "lsh":
         kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate,
-                  n_rounds=a.n_rounds, n_buckets=a.n_buckets, cap=a.cap)
+                  n_rounds=a.n_rounds, n_buckets=a.n_buckets, cap=a.cap,
+                  learn_hash=a.learn_hash)
     else:
         kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate, use_triton=a.use_triton)
     m = CausalLM(a.vocab, a.d, a.h, a.layers, max_len=a.L + 8, attn=a.attn, **kw).to(dev)
@@ -149,11 +157,14 @@ def main():
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=dev == "cuda"):
             logits = m(x)
             ce = F.cross_entropy(logits.reshape(-1, a.vocab), y.reshape(-1))
-        opt.zero_grad(); ce.backward()
+            hl = m.hash_loss() if (a.attn == "lsh" and a.learn_hash) else None
+            loss = ce + a.lambda_h * hl if hl is not None else ce
+        opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(m.parameters(), 1.0)
         opt.step()
         if s % 500 == 0 or s == a.steps - 1:
             print({"step": s, "ce": round(ce.item(), 4),
+                   "hash": round(hl.item(), 4) if hl is not None else None,
                    "lr": round(lr_at(s), 6), "sec": round(time.time() - t0, 1)}, flush=True)
 
     def _ppl():
@@ -164,9 +175,12 @@ def main():
         val_loss = evaluate(m, val, a.bs, a.L, dev)   # dense oracle
         m.set_dense_select(False)                      # LSH inference (linear)
         lsh_sweep = {}
-        for nr, nb in [(4, 64), (8, 64), (16, 64), (32, 64)]:
-            m.set_lsh_rounds(nr, nb, dev)
-            lsh_sweep[f"{nr}r{nb}b"] = _ppl()
+        if a.learn_hash:
+            lsh_sweep[f"learned_{a.n_rounds}r{a.n_buckets}b"] = _ppl()
+        else:
+            for nr, nb in [(4, 64), (8, 64), (16, 64), (32, 64)]:
+                m.set_lsh_rounds(nr, nb, dev)
+                lsh_sweep[f"{nr}r{nb}b"] = _ppl()
         m.set_dense_select(True)
     else:
         val_loss = evaluate(m, val, a.bs, a.L, dev)
@@ -176,6 +190,8 @@ def main():
             vl = evaluate(m, val, a.bs, el, dev, iters=30)
             ppl_by_len[el] = round(math.exp(vl), 3)
     res = {"attn": a.attn, "use_triton": a.use_triton, "gate": a.gate,
+           "learn_hash": a.learn_hash, "block": a.block, "topk": a.topk,
+           "n_rounds": a.n_rounds, "n_buckets": a.n_buckets, "cap": a.cap,
            "params": nparams, "val_loss": round(val_loss, 4),
            "val_ppl": round(math.exp(val_loss), 3), "ppl_by_len": ppl_by_len,
            "lsh_sweep": lsh_sweep,

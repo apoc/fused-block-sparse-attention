@@ -72,9 +72,13 @@ that single-level block-pair selection has an $\Ocomplex(N^{4/3})$ compute
 floor: no block-size schedule yields end-to-end linearity, as the quadratic
 only moves between the selection and read stages.
 A second, lossless linear selector, LSH bucketing, matches block-sparse accuracy
-under supervised routing (0.92 vs.\ 0.96 on MQAR) and far exceeds centroid, but
-its unsupervised (gate-only) routing is inert in a 45M language model, matching a
-no-routing baseline, leaving reliable unsupervised linear selection open.
+under supervised routing (0.92 vs.\ 0.96 on MQAR) and far exceeds centroid.
+Training through a dense selector and hashing only at inference is linear and
+accuracy-preserving for retrieval; for language modeling a parameter-free hash
+collapses at a sparse budget (perplexity 349), but a learned, co-trained hash
+restores usability to within $30\%$ of the quadratic selector (perplexity 10.2),
+recovering at block granularity the token-level advantage of learned over
+parameter-free hashing.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -138,6 +142,11 @@ SRAM, never materializing the gathered tensor.
   to 16M tokens: the read is linear, but single-level block-pair selection has
   an $\Ocomplex(N^{4/3})$ floor that no block-size schedule can beat and that
   exhausts memory before any latency crossover (\Cref{sec:floor}).
+\item A \textbf{learned-hash linear selector}: training through a dense selector
+  and hashing only at inference is linear and accuracy-preserving for retrieval,
+  and a co-trained hash recovers language-model usability that a parameter-free
+  hash loses at a sparse budget (perplexity $349 \to 10.2$), at a tunable
+  representation penalty (\Cref{sec:lsh}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
@@ -482,22 +491,37 @@ hashed into the query's bucket.
 
 For \emph{language modeling} it does not. At $n_{\text{blk}}{=}128$ (block 4,
 $L{=}512$, gate only) and a matched attention budget (own block plus top-4), a
-dense selector that scores all blocks reaches 7.9 perplexity, but LSH selecting
-its top-4 from $\sim$16 bucket candidates reaches 113 to 1115 (worse at fewer
-rounds). The dense selector at the same budget succeeds, so this is not a coverage
-floor: LSH's bucketing fails to recall the handful of relevant blocks the dense
-selector finds. A single needle is easy to hash to; the blocks a language model
-needs per query are not, at least with this hash. The apparent unsupervised LM
-recovery held only at near-dense coverage (32 rounds for 32 blocks) and does not
-survive at a sparse budget.
+dense selector that scores all blocks reaches 7.9 perplexity, but a parameter-free
+LSH selecting its top-4 from $\sim$16 bucket candidates reaches 113 to 1115 (worse
+at fewer rounds). The dense selector at the same budget succeeds, so this is not a
+coverage floor: the random hash fails to recall the handful of relevant blocks the
+dense selector finds. A single needle is easy to hash to; the blocks a language
+model needs per query are not, at least with a fixed random hash.
 
-So train-dense / infer-LSH yields a genuinely linear, accuracy-preserving selector
-for needle-style retrieval, but not yet for general language-model attention. The
-open problem is a hash whose recall of content-relevant blocks is high enough for
-the LM at a sparse budget; a bit-based SimHash~\cite{rabbani2024lshe} or a learned
-hash~\cite{guo2026dashkv} (both used for token-level KV retrieval, the latter
-reporting higher recall than plain LSH) are the natural next steps for the
-block-level selector.
+A \emph{learned} hash removes the catastrophe. We make the projection $R$ a trained
+parameter and add a self-distilled collision loss, an InfoNCE that pulls each query
+block's dense-selected key blocks to share a bucket under $R$, co-training the block
+representations to be hash-friendly with weight $\lambda_h$; the hash still never
+enters the inference selection's gradient path. The outcome is a tradeoff set by
+$\lambda_h$ (Table~\ref{tab:lsh-learn}). Light pressure ($\lambda_h{=}0.1$) leaves
+the dense oracle almost intact (6.6 to 7.8 perplexity) yet collapses the inference
+recall gap from $53\times$ to $1.3\times$: the linear-inference LM reaches 10.2
+perplexity, within $30\%$ of the quadratic block-sparse selector at the same
+attention budget, where the random hash was unusable at 349. Heavier pressure
+($\lambda_h{=}0.5$) closes the gap almost entirely ($1.06\times$) but over-degrades
+the oracle (15.1), so net quality is worse. A learned hash thus buys recall, but
+only by reshaping the representation, which costs selection accuracy: the same
+representation-quality wall that defeats centroid routing, now seen from the
+hashing side.
+
+So train-dense / infer-LSH yields a genuinely linear selector that is
+accuracy-preserving for needle-style retrieval and, with a learned hash, usable for
+language modeling at a sparse budget, though still short of the quadratic block
+selector. This confirms at block granularity, and at small scale, the token-level
+finding of DASH-KV~\cite{guo2026dashkv} that a learned hash recovers the recall a
+parameter-free hash~\cite{rabbani2024lshe} loses. Closing the remaining gap to the
+quadratic selector, rather than merely tracking a degraded oracle, is the open
+problem.
 
 \begin{table}[h]
 \centering
@@ -513,6 +537,26 @@ $n_{\text{blk}}$ & LSH acc & LSH hit & oracle acc \\
 128 & 0.95 & 0.978 & 0.99 \\
 256 & 0.98 & 0.992 & 0.99 \\
 512 & 0.99 & 0.994 & 0.99 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Learned vs.\ random hash, train-dense / infer-LSH on a 45M language model
+($n_{\text{blk}}{=}128$, block 4, top-4, 8 rounds, 64 buckets, gate only, 3000
+steps). The learned hash co-trains $R$ and the block representations with weight
+$\lambda_h$; light pressure removes the recall catastrophe at little oracle cost.
+The block-sparse matched-budget oracle (quadratic selection) is 7.9.}
+\label{tab:lsh-learn}
+\small
+\begin{tabular}{lccc}
+\toprule
+selector & oracle PPL & LSH-infer PPL & gap \\
+\midrule
+random hash ($\lambda_h{=}0$) & 6.6 & 348.6 & $53\times$ \\
+learned ($\lambda_h{=}0.1$) & 7.8 & \textbf{10.2} & $1.3\times$ \\
+learned ($\lambda_h{=}0.5$) & 15.1 & 16.1 & $1.06\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -678,6 +722,26 @@ attention projections differently, limiting fine-grained token extraction.
 This is a fundamental limitation of content-routed linear-selection attention
 that, to our knowledge, has not been previously characterized.
 
+\subsection{Linear Selection and What Scales Instead}
+
+The LSH study (\Cref{sec:lsh}) sharpens the centroid finding. A learned hash can
+close the train-dense / infer-LSH recall gap that a parameter-free hash leaves
+open (from $53\times$ to $1.3\times$ on the 45M LM), but only by co-training the
+block representations to be hash-friendly, which degrades the selection oracle.
+Recall and representation fidelity therefore trade off: centroid routing
+sacrifices the representation outright, a learned hash sacrifices a tunable
+fraction of it, and neither reaches the quadratic block selector at a sparse
+budget. This is consistent with what scales in practice. Trained block-selection
+methods (NSA~\cite{yuan2025nsa}, MoBA~\cite{lu2025moba}) do not make selection
+asymptotically linear: they score blocks with a trained selector and attend to a
+selected linear-size subset, paying an $\Ocomplex(n_{\text{blk}}^2)$ block-scoring
+cost that is sub-quadratic in $N$ only by the block-size constant. The $N^{4/3}$
+floor (\Cref{sec:floor}) explains why this is the design that scales: no block
+schedule removes the quadratic from a single-level all-pairs selector, so the
+practical compromise is to keep selection quadratic but cheap and trainable and to
+save the large constant on the attention read, exactly the regime the fused kernel
+targets. Genuinely linear, accuracy-preserving content selection remains open.
+
 \subsection{Limitations}
 
 \begin{itemize}[leftmargin=*,itemsep=2pt]
@@ -708,7 +772,10 @@ bucketing, which prunes the search rather than the representation, matches
 block-sparse accuracy under supervised routing and far exceeds centroid, showing
 a lossless-refine linear selector can preserve accuracy; but its unsupervised
 routing proved inert, matching a no-routing baseline on a 45M language model.
-Reliable unsupervised linear selection remains open.
+Reliable unsupervised linear selection remains open. Training through a dense
+selector and swapping in a learned hash at inference makes linear-inference
+language modeling usable, within $30\%$ of the quadratic selector at a sparse
+budget, though closing that gap remains open.
 
 Promising directions include scaling to the 100M+ regime where
 needle-in-a-haystack retrieval becomes measurable, extending the kernel to

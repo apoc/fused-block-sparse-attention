@@ -1,0 +1,26 @@
+{
+  "attn": "lsh",
+  "use_triton": false,
+  "gate": true,
+  "learn_hash": true,
+  "block": 4,
+  "topk": 4,
+  "n_rounds": 8,
+  "n_buckets": 64,
+  "cap": 8,
+  "params": 45221120,
+  "val_loss": 2.0554,
+  "val_ppl": 7.81,
+  "ppl_by_len": {
+    "128": 10.429,
+    "256": 9.006,
+    "512": 7.888
+  },
+  "lsh_sweep": {
+    "learned_8r64b": 10.176
+  },
+  "steps": 3000,
+  "L": 512,
+  "d": 512,
+  "layers": 6
+}
