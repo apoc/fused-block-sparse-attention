@@ -120,6 +120,10 @@ def main():
     p.add_argument("--cap", type=int, default=8, help="LSH bucket capacity")
     p.add_argument("--learn_hash", action="store_true", help="learned hash planes + alignment loss")
     p.add_argument("--lambda_h", type=float, default=1.0, help="hash-alignment loss weight")
+    p.add_argument("--lambda_h_final", type=float, default=None,
+                   help="anneal lambda_h linearly to this by the last step (default: constant)")
+    p.add_argument("--hash_detach_reps", action="store_true",
+                   help="train only R from the hash loss; keep reps for selection")
     p.add_argument("--gate", action="store_true")
     p.add_argument("--use_triton", action="store_true")
     p.add_argument("--data", default="../tinystories.bin")
@@ -136,7 +140,7 @@ def main():
     if a.attn == "lsh":
         kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate,
                   n_rounds=a.n_rounds, n_buckets=a.n_buckets, cap=a.cap,
-                  learn_hash=a.learn_hash)
+                  learn_hash=a.learn_hash, hash_detach_reps=a.hash_detach_reps)
     else:
         kw = dict(block=a.block, topk=a.topk, sel_dim=32, gate=a.gate, use_triton=a.use_triton)
     m = CausalLM(a.vocab, a.d, a.h, a.layers, max_len=a.L + 8, attn=a.attn, **kw).to(dev)
@@ -158,13 +162,16 @@ def main():
             logits = m(x)
             ce = F.cross_entropy(logits.reshape(-1, a.vocab), y.reshape(-1))
             hl = m.hash_loss() if (a.attn == "lsh" and a.learn_hash) else None
-            loss = ce + a.lambda_h * hl if hl is not None else ce
+            lam_h = a.lambda_h if a.lambda_h_final is None else \
+                a.lambda_h + (a.lambda_h_final - a.lambda_h) * (s / max(1, a.steps - 1))
+            loss = ce + lam_h * hl if hl is not None else ce
         opt.zero_grad(); loss.backward()
         torch.nn.utils.clip_grad_norm_(m.parameters(), 1.0)
         opt.step()
         if s % 500 == 0 or s == a.steps - 1:
             print({"step": s, "ce": round(ce.item(), 4),
                    "hash": round(hl.item(), 4) if hl is not None else None,
+                   "lam_h": round(lam_h, 4) if hl is not None else None,
                    "lr": round(lr_at(s), 6), "sec": round(time.time() - t0, 1)}, flush=True)
 
     def _ppl():
@@ -190,7 +197,9 @@ def main():
             vl = evaluate(m, val, a.bs, el, dev, iters=30)
             ppl_by_len[el] = round(math.exp(vl), 3)
     res = {"attn": a.attn, "use_triton": a.use_triton, "gate": a.gate,
-           "learn_hash": a.learn_hash, "block": a.block, "topk": a.topk,
+           "learn_hash": a.learn_hash, "lambda_h": a.lambda_h,
+           "lambda_h_final": a.lambda_h_final, "hash_detach_reps": a.hash_detach_reps,
+           "block": a.block, "topk": a.topk,
            "n_rounds": a.n_rounds, "n_buckets": a.n_buckets, "cap": a.cap,
            "params": nparams, "val_loss": round(val_loss, 4),
            "val_ppl": round(math.exp(val_loss), 3), "ppl_by_len": ppl_by_len,

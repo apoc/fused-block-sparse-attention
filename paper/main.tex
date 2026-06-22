@@ -514,6 +514,15 @@ only by reshaping the representation, which costs selection accuracy: the same
 representation-quality wall that defeats centroid routing, now seen from the
 hashing side.
 
+Two controls show this coupling is intrinsic, not an artifact of co-training.
+Training only the hash planes while freezing the representations keeps the oracle
+intact (6.6) but leaves the inference gap $15\times$ open (perplexity 97): the hash
+alone cannot recover recall. Annealing $\lambda_h$ from 0.5 to 0 does not beat light
+constant pressure either (oracle 11.8, inference 14.0); once the representations are
+pulled toward hash-friendliness, relaxing the pressure only partly restores
+selection quality. Neither the hash nor the schedule separates recall from
+representation fidelity.
+
 So train-dense / infer-LSH yields a genuinely linear selector that is
 accuracy-preserving for needle-style retrieval and, with a learned hash, usable for
 language modeling at a sparse budget, though still short of the quadratic block
@@ -545,9 +554,10 @@ $n_{\text{blk}}$ & LSH acc & LSH hit & oracle acc \\
 \centering
 \caption{Learned vs.\ random hash, train-dense / infer-LSH on a 45M language model
 ($n_{\text{blk}}{=}128$, block 4, top-4, 8 rounds, 64 buckets, gate only, 3000
-steps). The learned hash co-trains $R$ and the block representations with weight
-$\lambda_h$; light pressure removes the recall catastrophe at little oracle cost.
-The block-sparse matched-budget oracle (quadratic selection) is 7.9.}
+steps). $\lambda_h$ weights the collision loss; ``$R$ only'' freezes the
+representations and trains only the hash planes; ``anneal'' decays $\lambda_h$ from
+0.5 to 0. Light constant pressure is the best operating point. The block-sparse
+matched-budget oracle (quadratic selection) is 7.9.}
 \label{tab:lsh-learn}
 \small
 \begin{tabular}{lccc}
@@ -555,8 +565,10 @@ The block-sparse matched-budget oracle (quadratic selection) is 7.9.}
 selector & oracle PPL & LSH-infer PPL & gap \\
 \midrule
 random hash ($\lambda_h{=}0$) & 6.6 & 348.6 & $53\times$ \\
+learned, $R$ only (reps frozen) & 6.6 & 97.4 & $15\times$ \\
 learned ($\lambda_h{=}0.1$) & 7.8 & \textbf{10.2} & $1.3\times$ \\
 learned ($\lambda_h{=}0.5$) & 15.1 & 16.1 & $1.06\times$ \\
+learned, anneal ($\lambda_h{:}\,0.5{\to}0$) & 11.8 & 14.0 & $1.2\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -731,7 +743,10 @@ block representations to be hash-friendly, which degrades the selection oracle.
 Recall and representation fidelity therefore trade off: centroid routing
 sacrifices the representation outright, a learned hash sacrifices a tunable
 fraction of it, and neither reaches the quadratic block selector at a sparse
-budget. This is consistent with what scales in practice. Trained block-selection
+budget. Two controls (\Cref{sec:lsh}) show the coupling is intrinsic: freezing the
+representation and learning only the hash leaves the gap $15\times$ open, and
+annealing the hash weight to zero does not beat light constant pressure. This is
+consistent with what scales in practice. Trained block-selection
 methods (NSA~\cite{yuan2025nsa}, MoBA~\cite{lu2025moba}) do not make selection
 asymptotically linear: they score blocks with a trained selector and attend to a
 selected linear-size subset, paying an $\Ocomplex(n_{\text{blk}}^2)$ block-scoring

@@ -353,7 +353,7 @@ class LSHBucketSSA(nn.Module):
     """
     def __init__(self, d, h, block=32, topk=4, sel_dim=32, n_rounds=4,
                  n_buckets=8, cap=8, gate=False, causal=False, scale=None,
-                 learn_hash=False, hash_tau=1.0):
+                 learn_hash=False, hash_tau=1.0, hash_detach_reps=False):
         super().__init__()
         self.h, self.dh = h, d // h
         self.block, self.topk = block, topk
@@ -367,6 +367,7 @@ class LSHBucketSSA(nn.Module):
         self.gate, self.causal = gate, causal
         self.dense_select = False  # train: dense all-pairs top-k (allowed); eval: LSH bucketing
         self.learn_hash, self.hash_tau = learn_hash, hash_tau
+        self.hash_detach_reps = hash_detach_reps  # learn R only; keep reps for selection
         R0 = torch.randn(sel_dim, n_rounds, n_buckets)
         if learn_hash:
             self.R = nn.Parameter(R0)          # learned hash planes (DASH-KV-style)
@@ -416,8 +417,10 @@ class LSHBucketSSA(nn.Module):
                 # learned-hash alignment (self-distilled LSH): pull the dense-selected
                 # (relevant) key blocks to COLLIDE with their query block under R, via a
                 # soft-collision InfoNCE. Train-only; O(nblk^2) like dense_select itself.
-                pq = F.softmax(torch.einsum("bns,src->bnrc", sq, self.R) / self.hash_tau, -1)
-                pk = F.softmax(torch.einsum("bns,src->bnrc", sk, self.R) / self.hash_tau, -1)
+                sq_h = sq.detach() if self.hash_detach_reps else sq
+                sk_h = sk.detach() if self.hash_detach_reps else sk
+                pq = F.softmax(torch.einsum("bns,src->bnrc", sq_h, self.R) / self.hash_tau, -1)
+                pk = F.softmax(torch.einsum("bns,src->bnrc", sk_h, self.R) / self.hash_tau, -1)
                 coll = torch.einsum("birc,bjrc->bij", pq, pk)            # (B,nblk,nblk) E[#collisions]
                 cmask = (diag.view(1, 1, nblk) < diag.view(1, nblk, 1)) if self.causal \
                     else (diag.view(1, 1, nblk) != diag.view(1, nblk, 1))
