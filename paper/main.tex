@@ -56,7 +56,7 @@ Content-Dependent Selection:\\[4pt]
 \begin{abstract}
 We present a block-sparse attention mechanism with a fused Triton kernel that
 achieves memory parity with dense FlashAttention while delivering up to
-$7.4\times$ latency speedup at 262k-token context length. The block selector
+$7.0\times$ latency speedup at 262k-token context length. The block selector
 is trained jointly with the model via MoE-style gate coupling and an auxiliary
 routing loss, reaching near-perfect block-retrieval accuracy (hit $= 0.99$)
 without a separate pre-training stage. On a 45M-parameter language model
@@ -112,7 +112,7 @@ However, two practical barriers remain:
 \end{enumerate}
 
 We address both barriers. For~(1), we use MoE-style gate coupling
-\cite{shazeer2017moe} -adding $\LogSigmoid(\text{score})$ as a bias to
+\cite{shazeer2017moe}, adding $\LogSigmoid(\text{score})$ as a bias to
 attention logits, so the selector receives task gradients. An auxiliary
 routing loss (cross-entropy on the known needle block for synthetic tasks,
 InfoNCE contrastive loss~\cite{oord2018infonce} for centroid routing) provides
@@ -125,7 +125,7 @@ SRAM, never materializing the gathered tensor.
 \begin{itemize}[leftmargin=*,itemsep=2pt]
 \item A \textbf{fused Triton kernel} for block-sparse attention (forward +
   backward) achieving memory parity with dense FlashAttention
-  ($1.11$~GB vs.\ $1.12$~GB at 262k tokens) and $7.4\times$ latency speedup
+  ($1.11$~GB vs.\ $1.12$~GB at 262k tokens) and $7.0\times$ latency speedup
   (\Cref{sec:triton}).
 \item \textbf{Gate-coupled selector training} with InfoNCE routing loss,
   fixing a collapse failure in centroid-based linear selection
@@ -157,9 +157,9 @@ Fixed-pattern sparsity (Longformer~\cite{beltagy2020longformer}, BigBird
 \cite{zaheer2020bigbird}) restricts attention to local windows plus global
 tokens but cannot solve content-dependent retrieval tasks like multi-query
 associative recall (MQAR)~\cite{arora2024mqar,olsson2022induction}.
-Content-dependent methods -Routing Transformer~\cite{roy2021routing},
+Content-dependent methods such as the Routing Transformer~\cite{roy2021routing},
 Reformer~\cite{kitaev2020reformer}, Sparse Sinkhorn Attention
-\cite{tay2020sinkhorn}, NSA~\cite{yuan2025nsa}, MoBA~\cite{lu2025moba} -learn
+\cite{tay2020sinkhorn}, NSA~\cite{yuan2025nsa}, and MoBA~\cite{lu2025moba} learn
 to select relevant blocks but face the selector-gradient problem.
 
 \paragraph{Inference-time sparse selection.}
@@ -256,11 +256,11 @@ with $\lambda_r$ annealed to zero over the second half of training.
 \subsection{Complexity}
 
 \begin{itemize}[leftmargin=*,itemsep=1pt]
-\item \textbf{Attention:} $\Ocomplex(N \cdot k \cdot B_s)$ -linear in $N$.
+\item \textbf{Attention:} $\Ocomplex(N \cdot k \cdot B_s)$, linear in $N$.
 \item \textbf{Selection (block-pair):} $\Ocomplex(n_{\text{blk}}^2) =
   \Ocomplex((N/B_s)^2)$, quadratic on the reduced axis, shrunk by $B_s^2$.
 \item \textbf{Selection (centroid):} $\Ocomplex(n_{\text{blk}} \cdot C)$, linear.
-\item \textbf{Memory (fused kernel):} $\Ocomplex(N)$ -only base Q/K/V,
+\item \textbf{Memory (fused kernel):} $\Ocomplex(N)$, only base Q/K/V,
   no gathered tensor.
 \end{itemize}
 
@@ -642,14 +642,14 @@ $L$ & Dense (ms) & Sparse-PT (ms) & Triton (ms) & Dense (GB) & PT (GB) & Triton 
 \end{tabular}
 \end{table}
 
-\paragraph{Memory.} The Triton kernel uses 1.11\,GB at 262k -parity with
+\paragraph{Memory.} The Triton kernel uses 1.11\,GB at 262k, at parity with
 dense FlashAttention (1.12\,GB) and $40\times$ less than the PyTorch
 gather reference (42.72\,GB). The fused kernel never materializes the
 gathered K/V tensor; all intermediate state lives in SRAM.
 
-\paragraph{Latency.} The Triton kernel is $7.4\times$ faster than dense at
-262k (114\,ms vs.\ 797\,ms). The crossover occurs at $\sim$32k tokens. At
-65k, the kernel is already $1.8\times$ faster than dense.
+\paragraph{Latency.} The Triton kernel is $7.0\times$ faster than dense at
+262k (114\,ms vs.\ 797\,ms). The crossover lies between 32k and 65k. At
+65k, the kernel is already $1.7\times$ faster than dense.
 
 \paragraph{PyTorch gather is the bottleneck.} The same algorithm, same
 selection, but PyTorch materializes the gather (42.7\,GB) and is $6.5\times$
@@ -762,8 +762,9 @@ targets. Genuinely linear, accuracy-preserving content selection remains open.
 \begin{itemize}[leftmargin=*,itemsep=2pt]
 \item Single-level block-pair selection is $\Ocomplex(n_{\text{blk}}^2)$ with
   an $\Ocomplex(N^{4/3})$ floor no block schedule can beat (\Cref{sec:floor});
-  it exhausts memory before any latency crossover. Centroid routing is linear
-  but accuracy-broken.
+  it exhausts memory before any latency crossover. The linear selectors trade
+  cost for quality: centroid routing is accuracy-broken, and a learned-hash LSH
+  is usable but representation-taxed, still short of the quadratic selector.
 \item NIAH requires a larger model; our 45M model is too small.
 \item The backward kernel uses \texttt{atomic\_add} for dK/dV, which may
   serialize under high contention. A split-K or warp-level reduction could
@@ -775,7 +776,7 @@ targets. Genuinely linear, accuracy-preserving content selection remains open.
 \section{Conclusion}\label{sec:conclusion}
 
 We demonstrated that block-sparse attention with a fused Triton kernel
-achieves memory parity with dense FlashAttention and $7.4\times$ latency
+achieves memory parity with dense FlashAttention and $7.0\times$ latency
 speedup at long contexts, while maintaining within-4\% perplexity on a real
 language model. The gate-coupled selector training recipe is simple,
 effective, and requires no separate pre-training stage.
