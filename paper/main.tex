@@ -83,7 +83,8 @@ Finally, we validate the mechanism on a frontier model: swapping our training-fr
 block-sparse selection into the 10 full-attention layers of Qwen3.6-35B-A3B (a 35B
 parameter mixture-of-experts model) recovers full-attention perplexity to within
 $1.6\%$ at 64k context while attending to only $6\%$ of blocks, and beats random
-selection by $3$ to $4\times$ at matched budget.
+selection by $3$ to $4\times$ at matched budget; single-needle retrieval, however,
+needs roughly twice that block budget.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -157,7 +158,9 @@ SRAM, never materializing the gathered tensor.
   $1.6\%$ of full-attention perplexity at 64k while attending to $6\%$ of blocks and
   beats random selection $3$ to $4\times$ at matched budget. An oracle ceiling bounds
   the achievable gain (a perfect selector roughly halves the heuristic's loss), and a
-  distilled linear selector captures none of it (\Cref{sec:donor}).
+  distilled linear selector captures none of it; single-needle retrieval needs about
+  twice the perplexity budget, a gap traced partly to the selector's query pooling
+  (\Cref{sec:donor}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
