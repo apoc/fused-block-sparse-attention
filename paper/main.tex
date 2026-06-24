@@ -860,7 +860,13 @@ the block-mean retrieves nothing, recovers $0.67$ at 32k top-16 and at both top-
 top-32 of 64k, tracking the single-token rank rather than a propagation limit. A
 two-stage mean-then-max variant helps less, since the per-token max re-inflates
 competitor blocks. The prefill block-mean, not content selection, thus sets most of
-the retrieval floor, and single-token decode should largely avoid it.
+the retrieval floor, and single-token decode should largely avoid it. This is
+expected rather than new: decode-time selectors already use the single current query
+(Quest~\cite{tang2024quest}, whose min/max key bound we reuse) and trained block
+selectors gate per token (MoBA~\cite{lu2025moba}, NSA~\cite{yuan2025nsa};
+TokenSelect~\cite{wu2024tokenselect} likewise separates prefill chunk-averaged from
+decode per-query selection); we only quantify what the prefill block-mean costs
+retrieval in a training-free swap and show a one-line reversion recovers most of it.
 
 \begin{table}[h]
 \centering
@@ -1118,6 +1124,12 @@ J.~Guo, Z.~Zhang, J.~Xie, M.~T.~Iqbal, D.~Han, L.-H.~Lee, S.-H.~Bae, J.~Zou,
 \newblock {DASH-KV}: Accelerating long-context {LLM} inference via asymmetric
   {KV} cache hashing.
 \newblock \emph{arXiv preprint} arXiv:2604.19351, 2026.
+
+\bibitem{wu2024tokenselect}
+W.~Wu, Z.~Pan, C.~Wang, L.~Chen, Y.~Bai, T.~Wang, K.~Fu, Z.~Wang, and H.~Xiong.
+\newblock {TokenSelect}: Efficient long-context inference and length extrapolation
+  for {LLMs} via dynamic token-level {KV} cache selection.
+\newblock \emph{arXiv preprint} arXiv:2411.02886, 2024.
 
 \end{thebibliography}
 

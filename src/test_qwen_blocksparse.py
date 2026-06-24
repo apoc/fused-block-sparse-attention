@@ -81,3 +81,37 @@ def test_selectlearned_causal_and_budget():
     assert idx.shape == (B, Hkv, nblk, 4 + 2)
     qb = torch.arange(nblk).view(1, 1, nblk, 1)
     assert (idx <= qb).all()
+
+
+def _causal_budget(S, topk=4, bs=32):
+    B, Hq, Hkv, L, d = 1, 16, 2, 256, 64
+    q = torch.randn(B, Hq, L, d); k = torch.randn(B, Hkv, L, d)
+    idx = S.select(q, k)
+    nblk = L // 32
+    assert idx.shape == (B, Hkv, nblk, topk + 2), idx.shape    # topk + own + sink
+    qb = torch.arange(nblk).view(1, 1, nblk, 1)
+    assert (idx <= qb).all(), idx.max().item()                 # never selects a future block
+    assert (idx >= 0).all()
+
+
+def test_selectmaxqmax_causal_and_budget():
+    from qwen_blocksparse import SelectMaxQMax
+    _causal_budget(SelectMaxQMax(topk=4, bs=32, sink=True))
+
+
+def test_selectlasttok_causal_and_budget():
+    from qwen_blocksparse import SelectLastTok
+    _causal_budget(SelectLastTok(topk=4, bs=32, sink=True))
+
+
+def test_selecttwostage_causal_and_budget():
+    from qwen_blocksparse import SelectTwoStage
+    _causal_budget(SelectTwoStage(topk=4, bs=32, sink=True, over=4))
+
+
+def test_selecttwostage_sparse_forward_finite():
+    from qwen_blocksparse import SelectTwoStage
+    B, Hq, Hkv, L, d = 1, 8, 2, 256, 48
+    q = torch.randn(B, Hq, L, d); k = torch.randn(B, Hkv, L, d); v = torch.randn(B, Hkv, L, d)
+    out = blocksparse_forward(q, k, v, selector=SelectTwoStage(topk=2, bs=32, over=4), topk=2, bs=32, q_chunk=2)
+    assert out.shape == (B, Hq, L, d) and torch.isfinite(out).all()
