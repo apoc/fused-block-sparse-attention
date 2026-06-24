@@ -757,7 +757,8 @@ delta isolates selection. That within-path floor is $+0.28\%$ at 16k.
 Gutenberg) from 16k to 64k context (Table~\ref{tab:donor}). Training-free content
 selection recovers full-attention quality and degrades gracefully as the budget
 shrinks: at 64k, attending to 32 of 512 blocks (6\%) stays within $1.60\%$ of full
-attention. It beats a random-block baseline by $3$ to $4\times$ at matched budget,
+attention. It beats a random-block baseline by $3$ to $4\times$ at matched budget on
+perplexity,
 and the gap \emph{grows} with context (top-16: $4.1$, $5.5$, $7.5$ percentage points
 at 16k, 32k, 64k), so selection matters more as context lengthens.
 
@@ -924,7 +925,9 @@ targets. Genuinely linear, accuracy-preserving content selection remains open.
   it exhausts memory before any latency crossover. The linear selectors trade
   cost for quality: centroid routing is accuracy-broken, and a learned-hash LSH
   is usable but representation-taxed, still short of the quadratic selector.
-\item NIAH requires a larger model; our 45M model is too small.
+\item NIAH on our from-scratch models needs more scale (the 45M scores zero); we
+  measure retrieval instead on the 35B donor swap (\Cref{sec:donor}), where it holds
+  only above roughly $13\%$ of blocks.
 \item The backward kernel uses \texttt{atomic\_add} for dK/dV, which may
   serialize under high contention. A split-K or warp-level reduction could
   improve throughput.
@@ -958,8 +961,9 @@ $1.6\%$ of full-attention perplexity at 64k context while attending to $6\%$ of
 blocks, evidence that content-dependent block selection is useful in a frontier
 model at inference, with no training.
 
-Promising directions include scaling to the 100M+ regime where
-needle-in-a-haystack retrieval becomes measurable, extending the kernel to
+Promising directions include scaling our from-scratch models to the 100M+ regime
+where needle-in-a-haystack retrieval becomes measurable on them (it already is on
+the 35B donor swap, \Cref{sec:donor}), extending the kernel to
 autoregressive KV-cache decoding, and designing a linear-selection mechanism
 that preserves the representation quality of pairwise scoring. More broadly,
 the fused kernel removes the implementation barrier that has masked
