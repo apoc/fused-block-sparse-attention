@@ -79,6 +79,11 @@ collapses at a sparse budget (perplexity 349), but a learned, co-trained hash
 restores usability to within $30\%$ of the quadratic selector (perplexity 10.2),
 recovering at block granularity the token-level advantage of learned over
 parameter-free hashing.
+Finally, we validate the mechanism on a frontier model: swapping our training-free
+block-sparse selection into the 10 full-attention layers of Qwen3.6-35B-A3B (a 35B
+parameter mixture-of-experts model) recovers full-attention perplexity to within
+$1.6\%$ at 64k context while attending to only $6\%$ of blocks, and beats random
+selection by $3$ to $4\times$ at matched budget.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -147,6 +152,11 @@ SRAM, never materializing the gathered tensor.
   and a co-trained hash recovers language-model usability that a parameter-free
   hash loses at a sparse budget (perplexity $349 \to 10.2$), at a tunable
   representation penalty (\Cref{sec:lsh}).
+\item A \textbf{frontier-model validation}: swapping the training-free selector into
+  the 10 full-attention layers of Qwen3.6-35B-A3B (35B-parameter MoE) holds within
+  $1.6\%$ of full-attention perplexity at 64k while attending to $6\%$ of blocks and
+  beats random selection $3$ to $4\times$ at matched budget; a distilled selector
+  does not beat the heuristic (\Cref{sec:donor}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
@@ -713,6 +723,75 @@ stages but not removed.} Genuinely linear selection requires scoring
 $\Ocomplex(C)$ candidates per query (clustering, hashing, or hierarchy), not
 all $n_{\text{blk}}$, the open problem of \Cref{sec:centroid}.
 
+% ─═ 8. Donor-Model Validation ═════════════════════════════════════════════
+\section{Donor-Model Validation: Swap into Qwen3.6-35B-A3B}
+\label{sec:donor}
+
+To test whether content-dependent block-sparse selection transfers beyond our 45M
+models, we swap it, at inference only, into a frontier open-weight model:
+Qwen3.6-35B-A3B, a 35B-parameter (3B active) mixture-of-experts model. The model is
+a hybrid: of its 40 layers only 10 are full softmax attention (every fourth; the
+other 30 are linear attention), so it is already mostly sub-quadratic. We replace
+the softmax attention in those 10 residual quadratic layers with our block-sparse
+select-then-attend, reusing the model's own query/key/value projections, partial
+multimodal RoPE, grouped-query attention (16 query heads, 2 key/value heads, head
+dimension 256), and output gate; only the dense softmax over all keys is replaced.
+Selection is training-free: each query block scores key blocks by a Quest-style
+\cite{tang2024quest} estimate of $\max_{t,s} q_t \cdot k_s$ (per-block key min and
+max), and attends to the top-$k$ plus the own and sink blocks. The swap is a
+HuggingFace transformers monkeypatch (not a vllm change); the block-sparse forward
+is the chunked PyTorch path of \Cref{sec:method}, so the whole study runs on a
+single GB10.
+
+\paragraph{Correctness.} With all blocks selected, the patched path reproduces the
+stock perplexity to $0.0000\%$ at every context (bit-identical SDPA), confirming the
+integration; the chunked gather path matches it to $5.7\times10^{-7}$ (fp32) and
+$4.6\times10^{-3}$ (bf16) per output. Because the MoE router is discrete, a
+bf16-level attention perturbation in 10 layers amplifies into a small perplexity
+shift, so we baseline each sparse run against \emph{all-blocks gather} (full
+attention through the same code path): the amplification is then common-mode and the
+delta isolates selection. That within-path floor is $+0.28\%$ at 16k.
+
+\paragraph{Results.} We measure held-out perplexity on a long English text (Project
+Gutenberg) from 16k to 64k context (Table~\ref{tab:donor}). Training-free content
+selection recovers full-attention quality and degrades gracefully as the budget
+shrinks: at 64k, attending to 32 of 512 blocks (6\%) stays within $1.60\%$ of full
+attention. It beats a random-block baseline by $3$ to $4\times$ at matched budget,
+and the gap \emph{grows} with context (top-16: $4.1$, $5.5$, $7.5$ percentage points
+at 16k, 32k, 64k), so selection matters more as context lengthens.
+
+\begin{table}[h]
+\centering
+\caption{Block-sparse swap into the 10 full-attention layers of Qwen3.6-35B-A3B,
+training-free, perplexity delta vs.\ stock (parentheses: fraction of blocks
+attended). Held-out Gutenberg text, $B_s{=}128$.}
+\label{tab:donor}
+\small
+\begin{tabular}{lcccc}
+\toprule
+context & top-8 & top-16 & top-32 & random-16 \\
+\midrule
+16k ($n_{\text{blk}}{=}128$) & $+3.79\%$ (6\%) & $+1.45\%$ (13\%) & $+0.48\%$ (25\%) & $+5.51\%$ \\
+32k ($n_{\text{blk}}{=}256$) & $+5.43\%$ (3\%) & $+2.33\%$ (6\%) & $+0.97\%$ (13\%) & $+7.86\%$ \\
+64k ($n_{\text{blk}}{=}512$) & $+10.1\%$ (2\%) & $+3.69\%$ (3\%) & $+1.60\%$ (6\%) & $+11.2\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{A learned selector does not help.} We also distilled a small per-layer
+selector (linear maps of block-pooled query and key, trained by KL to the stock
+per-block attention mass on a short calibration set) and swapped it in. It
+\emph{underperforms} the training-free heuristic (at 16k, top-8 $+5.5\%$ vs.\
+$+4.0\%$; top-16 $+2.4\%$ vs.\ $+1.2\%$): a linear map on pooled post-RoPE
+representations cannot beat a direct $\max q\cdot k$ estimate, echoing the
+representation tradeoff of \Cref{sec:centroid}.
+
+\paragraph{Scope.} This is an inference-time, forward-only perplexity study on
+in-distribution text; the relative deltas, not absolute perplexity, are the signal.
+It does not measure downstream long-context tasks (needle-in-a-haystack, RULER) or
+training with the swap, both of which are future work, as is a grouped-query,
+RoPE-aware fused kernel for wall-clock gains at these contexts.
+
 % ─═ 8. Discussion ═════════════════════════════════════════════════════════
 \section{Discussion}\label{sec:discussion}
 
@@ -792,6 +871,12 @@ Reliable unsupervised linear selection remains open. Training through a dense
 selector and swapping in a learned hash at inference makes linear-inference
 language modeling usable, within $30\%$ of the quadratic selector at a sparse
 budget, though closing that gap remains open.
+
+Beyond our own models, the mechanism transfers: swapping the training-free selector
+into the 10 full-attention layers of the 35B-parameter Qwen3.6-35B-A3B holds within
+$1.6\%$ of full-attention perplexity at 64k context while attending to $6\%$ of
+blocks, evidence that content-dependent block selection is useful in a frontier
+model at inference, with no training.
 
 Promising directions include scaling to the 100M+ regime where
 needle-in-a-haystack retrieval becomes measurable, extending the kernel to

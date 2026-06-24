@@ -2,7 +2,7 @@
 
 A study of content-dependent sparse attention for long-context transformers:
 a fused Triton kernel that reaches memory parity with dense FlashAttention and
-7.4x latency speedup at 262k tokens, plus an honest characterization of why
+7.0x latency speedup at 262k tokens, plus an honest characterization of why
 making the *selection* step genuinely linear is hard.
 
 ## Results
@@ -13,7 +13,7 @@ making the *selection* step genuinely linear is hard.
 |--------|-----------------|----------------------|
 | Val perplexity (TinyStories, 45M) | 14.41 | 15.00 |
 | Memory at 262k tokens | 1.12 GB | **1.11 GB** |
-| Latency at 262k tokens | 797 ms | **114 ms** (7.4x faster) |
+| Latency at 262k tokens | 797 ms | **114 ms** (7.0x faster) |
 | Latency crossover | - | ~32k tokens |
 | MQAR retrieval hit | - | 0.99 |
 
@@ -49,6 +49,32 @@ The fused attention *read* is linear (fit exponent 0.96 to 1.02). The block-pair
 - **Centroid** reaches linear cost and perfect recall but its lossy summary
   breaks accuracy (representation failure).
 
+### Donor-model validation: swap into Qwen3.6-35B-A3B
+
+We swap the training-free block-sparse selection, at inference, into the 10
+full-attention layers of Qwen3.6-35B-A3B (a 35B-parameter / 3B-active hybrid
+linear/full MoE model; the other 30 layers are already linear attention), reusing
+the model's GQA, partial multimodal RoPE, and output gate and replacing only the
+dense softmax. Integration is bit-exact (all-blocks reproduces stock perplexity to
+0.0000%). Held-out perplexity delta vs stock (training-free, Quest min/max selection):
+
+| context | nblk | top-8 | top-16 | top-32 | random-16 |
+|---------|------|-------|--------|--------|-----------|
+| 16k | 128 | +3.79% | +1.45% | +0.48% | +5.51% |
+| 32k | 256 | +5.43% | +2.33% | +0.97% | +7.86% |
+| 64k | 512 | +10.1% | +3.69% | **+1.60%** | +11.2% |
+
+- The mechanism transfers to a frontier model: at 64k, attending to 32 of 512
+  blocks (6%) stays within **1.60%** of full attention, training-free.
+- Content selection beats random by **3 to 4x** at matched budget, and the gap
+  grows with context (top-16: 4.1, 5.5, 7.5 points at 16k / 32k / 64k).
+- A distilled learned selector does **not** beat the training-free heuristic
+  (top-8 +5.5% vs +4.0% at 16k): a linear map on pooled post-RoPE q/k cannot beat a
+  direct max(q.k) estimate (the same representation tradeoff as centroid / LSH).
+- Inference-time, forward-only perplexity on in-distribution text; relative deltas
+  are the signal. Downstream long-context tasks and a GQA/RoPE fused kernel are
+  future work.
+
 All raw experiment outputs are in `results/` (62 JSON/CSV files).
 
 ## Directory Structure
@@ -63,6 +89,10 @@ fused-block-sparse-attention/
 │   ├── verify_kernel.py    # Kernel correctness check vs gather reference
 │   ├── llm.py              # Char-level LM (shakespeare)
 │   ├── lm_tri.py           # Tokenized LM (TinyStories, Triton)
+│   ├── qwen_blocksparse.py  # GQA-aware chunked block-sparse core + selectors (Qwen swap)
+│   ├── patch_qwen.py        # Monkeypatch Qwen3.6-35B-A3B full-attention layers
+│   ├── eval_qwen_ppl.py     # Qwen perplexity A/B + top-k sweep (16k-64k)
+│   ├── distill_qwen_sel.py  # Stage 2 learned-selector distillation (negative result)
 │   ├── niah.py             # Needle-in-a-haystack test
 │   ├── bench.py            # Latency/memory benchmark (PyTorch)
 │   ├── bench_triton.py     # Latency/memory benchmark (Triton)
@@ -114,6 +144,14 @@ Two linear-time replacements for the O(nblk^2) block-pair scoring. Centroid
 routing fails on representation; LSH bucketing matches block-sparse under
 supervised routing but is fragile without supervision. See Results.
 
+### 5. Donor-Model Swap (`patch_qwen.py`, `eval_qwen_ppl.py`)
+
+Swaps the block-sparse core into Qwen3.6-35B-A3B's 10 full-attention layers
+(reusing GQA, partial multimodal RoPE, output gate). PyTorch chunked SDPA-gather
+keeps memory flat; perplexity is computed via hidden-states plus a chunked lm_head
+so 64k context fits on one GPU. Training-free selection transfers; a distilled
+selector does not beat it. See Results.
+
 ## Hardware
 
 - NVIDIA GB10 Grace-Blackwell, 128 GB unified memory
@@ -147,6 +185,9 @@ python bench_crossover.py --blocks 32,64,128 \
 # TinyStories LM (dense vs sparse-Triton)
 python lm_tri.py --attn sparse --use_triton --gate --steps 5000 \
     --bs 16 --L 512 --d 512 --h 8 --layers 6
+
+# Qwen3.6-35B-A3B donor-model swap (needs transformers>=4.57 + the model weights)
+python eval_qwen_ppl.py --ctxs 16384,32768,65536 --nseq 4
 ```
 
 ## License
