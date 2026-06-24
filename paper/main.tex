@@ -83,8 +83,9 @@ Finally, we validate the mechanism on a frontier model: swapping our training-fr
 block-sparse selection into the 10 full-attention layers of Qwen3.6-35B-A3B (a 35B
 parameter mixture-of-experts model) recovers full-attention perplexity to within
 $1.6\%$ at 64k context while attending to only $6\%$ of blocks, and beats random
-selection by $3$ to $4\times$ at matched budget; single-needle retrieval, however,
-needs roughly twice that block budget.
+selection by $3$ to $4\times$ at matched budget; single-needle retrieval needs
+roughly twice that block budget under mean-query selection, a gap a one-line
+last-token selector largely closes.
 All experiments run on a single NVIDIA GB10 Grace-Blackwell GPU.
 \end{abstract}
 
@@ -159,8 +160,8 @@ SRAM, never materializing the gathered tensor.
   beats random selection $3$ to $4\times$ at matched budget. An oracle ceiling bounds
   the achievable gain (a perfect selector roughly halves the heuristic's loss), and a
   distilled linear selector captures none of it; single-needle retrieval needs about
-  twice the perplexity budget, a gap traced partly to the selector's query pooling
-  (\Cref{sec:donor}).
+  twice the perplexity budget under mean-query selection, a gap a one-line last-token
+  query reduction largely closes (\Cref{sec:donor}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
@@ -840,42 +841,46 @@ for long-context capability, so we test single-needle retrieval directly: a magi
 number is placed at varying depths in long filler text and the model is queried for
 it, scored by greedy match on the answer span (six needles per cell). The dense
 model retrieves perfectly at every context (Table~\ref{tab:niah}), so the harness is
-sound. Content selection preserves retrieval, but only above a block budget near
-$13\%$, well above the $6\%$ at which perplexity stays within $1.6\%$: at 32k,
-top-32 ($13\%$) retrieves all six needles while top-16 ($6\%$) retrieves none, and
-at 64k every tested budget ($\le 6\%$) fails. Above that floor, content beats random
-at matched budget (16k top-16: $0.67$ vs.\ $0.0$); below it both are unreliable. So
-perplexity overstates the achievable sparsity for retrieval by roughly $2\times$:
-the same swap that holds perplexity at $6\%$ of blocks needs about $13\%$ to recover
-a needle. Six needles per cell is coarse, so the budget floor and the dense ceiling
-are the robust signals, not the per-cell rates.
-Part of this floor is the selector's query pooling, not content. SelectMax scores
+sound. With the block-mean selector, retrieval holds only above a budget near
+$13\%$, well above the $6\%$ at which perplexity stays within $1.6\%$
+(Table~\ref{tab:niah}): at 32k, top-32 ($13\%$) retrieves all six needles while
+top-16 ($6\%$) retrieves none, and at 64k every tested budget ($\le 6\%$) fails;
+where it works it beats random ($0.67$ vs.\ $0.0$ at 16k top-16). So this selector
+needs about twice the perplexity budget to retrieve. Six needles per cell is coarse,
+so the budget floor and the dense ceiling are the robust signals, not the per-cell
+rates.
+Most of this floor is the selector's query pooling, not content. SelectMax scores
 key blocks against the block-mean query, which ranks the needle block near $13\%$ of
 all blocks and worsens with context (median rank 19, 28, 67 at 16k, 32k, 64k),
-whereas the lone answer-trigger query token ranks it near 8 at every length: pooling
-$B_s$ queries dilutes the one that retrieves. Maxing the Quest score over the query
-block's tokens instead (a one-line change) ranks the needle in between and improves
-retrieval at matched budget without ever hurting it (for example 16k top-32 from
-$0.67$ to $1.0$, 32k top-16 from $0$ to $0.33$). It does not fully close the floor,
-and the residual is not explained by selection rank alone, so a retrieval-aware (non
-mean) query reduction, and single-token autoregressive decode, are indicated but not
-by themselves sufficient.
+whereas the lone retrieval query token ranks it near 8 at every length: pooling
+$B_s$ queries dilutes the one that retrieves. Selecting by each query block's last
+token instead (a one-line change, and exactly the query an autoregressive decode step
+issues) largely closes the floor: it lifts 16k top-16 from $0.67$ to $1.0$ and, where
+the block-mean retrieves nothing, recovers $0.67$ at 32k top-16 and at both top-16 and
+top-32 of 64k, tracking the single-token rank rather than a propagation limit. A
+two-stage mean-then-max variant helps less, since the per-token max re-inflates
+competitor blocks. The prefill block-mean, not content selection, thus sets most of
+the retrieval floor, and single-token decode should largely avoid it.
 
 \begin{table}[h]
 \centering
 \caption{Single-needle retrieval (exact match, six needles per cell) for the
-block-sparse swap, with the fraction of blocks attended in parentheses. The dense
-model retrieves perfectly; content selection needs about $13\%$ of blocks, roughly
-twice the $6\%$ at which perplexity stays within $1.6\%$ (Table~\ref{tab:donor}).}
+block-sparse swap. Each budget cell shows the block-mean selector / the last-token
+selector; the dense model retrieves perfectly ($1.00$) at every context. Block
+fractions for top-8/16/32 are $6/13/25\%$ at 16k, $3/6/13\%$ at 32k, $2/3/6\%$ at
+64k; random-16 is the block-mean selector over random blocks. The block-mean
+selector needs about $13\%$ of blocks, while the last-token selector retrieves at the
+perplexity budget (64k top-32, $6\%$) and below.}
 \label{tab:niah}
 \small
-\begin{tabular}{lccccc}
+\begin{tabular}{lcccc}
 \toprule
-context & stock & top-8 & top-16 & top-32 & random-16 \\
+context & top-8 & top-16 & top-32 & random-16 \\
+ & mean / last & mean / last & mean / last & mean \\
 \midrule
-16k & $1.00$ & $0.00$ (6\%) & $0.67$ (13\%) & $0.67$ (25\%) & $0.00$ (13\%) \\
-32k & $1.00$ & $0.00$ (3\%) & $0.00$ (6\%) & $1.00$ (13\%) & $0.33$ (6\%) \\
-64k & $1.00$ & $0.00$ (2\%) & $0.00$ (3\%) & $0.00$ (6\%) & $0.00$ (3\%) \\
+16k & $0.00/0.50$ & $0.67/1.00$ & $0.67/1.00$ & $0.00$ \\
+32k & $0.00/0.00$ & $0.00/0.67$ & $1.00/1.00$ & $0.33$ \\
+64k & $0.00/0.33$ & $0.00/0.67$ & $0.00/0.67$ & $0.00$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -940,8 +945,8 @@ targets. Genuinely linear, accuracy-preserving content selection remains open.
   cost for quality: centroid routing is accuracy-broken, and a learned-hash LSH
   is usable but representation-taxed, still short of the quadratic selector.
 \item NIAH on our from-scratch models needs more scale (the 45M scores zero); we
-  measure retrieval instead on the 35B donor swap (\Cref{sec:donor}), where it holds
-  only above roughly $13\%$ of blocks.
+  measure retrieval instead on the 35B donor swap (\Cref{sec:donor}), where the
+  usable budget depends strongly on the query reduction.
 \item The backward kernel uses \texttt{atomic\_add} for dK/dV, which may
   serialize under high contention. A split-K or warp-level reduction could
   improve throughput.

@@ -239,3 +239,61 @@ class SelectMaxQMax:
                  + torch.einsum('bhtd,bhjd->bhtj', qi.clamp(max=0), kmin))   # (B,Hkv,bs,nblk)
             score[:, :, i] = s.max(2).values                       # max over the bs query tokens
         return _finish(score, self.topk, self.sink, B, Hkv, nblk, q.device)
+
+
+class SelectLastTok:
+    """SelectMax scored by each query block's LAST token instead of the block-mean.
+    For the answer-generating block the last token is the retrieval query (the
+    diagnostic ranks the needle ~8 deep under it); for filler blocks it is irrelevant.
+    No competitor inflation (a single token, not a max). Assumes L % bs == 0 (true for
+    the eval) so the last token is real, not padding."""
+    def __init__(self, topk, bs, sink=True):
+        self.topk, self.bs, self.sink = topk, bs, sink
+
+    @torch.no_grad()
+    def select(self, q, k):
+        B, Hq, L, d = q.shape
+        Hkv = k.shape[1]; grp = Hq // Hkv; bs = self.bs
+        qp, nblk, _ = _pad_blocks(q, bs)
+        kp, _, _ = _pad_blocks(k, bs)
+        qlast = qp.view(B, Hkv, grp, nblk, bs, d).mean(2)[:, :, :, -1, :]   # (B,Hkv,nblk,d)
+        kb = kp.view(B, Hkv, nblk, bs, d)
+        kmin = kb.min(3).values; kmax = kb.max(3).values
+        score = (torch.einsum('bhid,bhjd->bhij', qlast.clamp(min=0), kmax)
+                 + torch.einsum('bhid,bhjd->bhij', qlast.clamp(max=0), kmin))
+        return _finish(score, self.topk, self.sink, B, Hkv, nblk, q.device)
+
+
+class SelectTwoStage:
+    """Two-stage selection: block-mean (cheap, broad recall) picks over*topk candidate
+    blocks, then a max-over-query-token re-score keeps top-k. Confining the qmax
+    re-rank to the candidate set avoids SelectMaxQMax's competitor inflation over all
+    blocks while still using per-token query peaks for precision."""
+    def __init__(self, topk, bs, sink=True, over=4):
+        self.topk, self.bs, self.sink, self.over = topk, bs, sink, over
+
+    @torch.no_grad()
+    def select(self, q, k):
+        B, Hq, L, d = q.shape
+        Hkv = k.shape[1]; grp = Hq // Hkv; bs = self.bs
+        qp, nblk, _ = _pad_blocks(q, bs)
+        kp, _, _ = _pad_blocks(k, bs)
+        qg = qp.view(B, Hkv, grp, nblk, bs, d).mean(2)             # (B,Hkv,nblk,bs,d)
+        kb = kp.view(B, Hkv, nblk, bs, d)
+        kmin = kb.min(3).values; kmax = kb.max(3).values          # (B,Hkv,nblk,d)
+        qpool = qg.mean(3)
+        s1 = (torch.einsum('bhid,bhjd->bhij', qpool.clamp(min=0), kmax)
+              + torch.einsum('bhid,bhjd->bhij', qpool.clamp(max=0), kmin))
+        diag = torch.arange(nblk, device=q.device)
+        s1 = s1.masked_fill(diag.view(1, 1, nblk, 1) < diag.view(1, 1, 1, nblk), float('-inf'))
+        M = min(self.over * self.topk, nblk)
+        cand = s1.topk(M, dim=-1).indices                         # (B,Hkv,nblk,M)
+        ci = cand.unsqueeze(-1).expand(B, Hkv, nblk, M, d)
+        kmax_c = torch.gather(kmax.unsqueeze(2).expand(B, Hkv, nblk, nblk, d), 3, ci)
+        kmin_c = torch.gather(kmin.unsqueeze(2).expand(B, Hkv, nblk, nblk, d), 3, ci)
+        s2 = (torch.einsum('bhitd,bhimd->bhitm', qg.clamp(min=0), kmax_c)
+              + torch.einsum('bhitd,bhimd->bhitm', qg.clamp(max=0), kmin_c))   # (B,Hkv,nblk,bs,M)
+        s2 = s2.max(3).values                                     # (B,Hkv,nblk,M)
+        full = torch.full((B, Hkv, nblk, nblk), float('-inf'), device=q.device, dtype=s2.dtype)
+        full.scatter_(3, cand, s2)
+        return _finish(full, self.topk, self.sink, B, Hkv, nblk, q.device)
