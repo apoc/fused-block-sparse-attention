@@ -72,10 +72,13 @@ def blocksparse_forward(q, k, v, *, selector, topk, bs, causal=True, scale=None,
         valid = (kp_ <= qpos) & (kp_ < L) & (~dup)            # (B,Hkv,qc,bs,kk*bs)
 
         qchunk = qp[:, :, i0 * bs:i1 * bs, :].reshape(B, Hkv, grp, qc, bs, d)
-        scores = torch.einsum('bhgqtd,bhqsd->bhgqts', qchunk, kb) * scale
-        scores = scores.masked_fill(~valid.view(B, Hkv, 1, qc, bs, kk * bs), float('-inf'))
-        probs = torch.nan_to_num(scores.softmax(-1), nan=0.0)
-        ov = torch.einsum('bhgqts,bhqsd->bhgqtd', probs, vb)
+        amask = torch.zeros(B, Hkv, 1, qc, bs, kk * bs, device=dev, dtype=qchunk.dtype)
+        amask.masked_fill_(~valid.view(B, Hkv, 1, qc, bs, kk * bs), float('-inf'))
+        kb_e = kb.view(B, Hkv, 1, qc, kk * bs, d).expand(B, Hkv, grp, qc, kk * bs, d)
+        vb_e = vb.view(B, Hkv, 1, qc, kk * bs, d).expand(B, Hkv, grp, qc, kk * bs, d)
+        ov = F.scaled_dot_product_attention(
+            qchunk, kb_e, vb_e,
+            attn_mask=amask.expand(B, Hkv, grp, qc, bs, kk * bs), scale=scale)
         out[:, :, i0 * bs:i1 * bs, :] = ov.reshape(B, Hq, qc * bs, d)
 
     return out[..., :L, :]
