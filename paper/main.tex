@@ -846,6 +846,17 @@ perplexity overstates the achievable sparsity for retrieval by roughly $2\times$
 the same swap that holds perplexity at $6\%$ of blocks needs about $13\%$ to recover
 a needle. Six needles per cell is coarse, so the budget floor and the dense ceiling
 are the robust signals, not the per-cell rates.
+Part of this floor is the selector's query pooling, not content. SelectMax scores
+key blocks against the block-mean query, which ranks the needle block near $13\%$ of
+all blocks and worsens with context (median rank 19, 28, 67 at 16k, 32k, 64k),
+whereas the lone answer-trigger query token ranks it near 8 at every length: pooling
+$B_s$ queries dilutes the one that retrieves. Maxing the Quest score over the query
+block's tokens instead (a one-line change) ranks the needle in between and improves
+retrieval at matched budget without ever hurting it (for example 16k top-32 from
+$0.67$ to $1.0$, 32k top-16 from $0$ to $0.33$). It does not fully close the floor,
+and the residual is not explained by selection rank alone, so a retrieval-aware (non
+mean) query reduction, and single-token autoregressive decode, are indicated but not
+by themselves sufficient.
 
 \begin{table}[h]
 \centering

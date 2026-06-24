@@ -1,0 +1,289 @@
+{
+  "16384": {
+    "agg": {
+      "nblk": 128,
+      "pool_med": 19,
+      "pool_min": 2,
+      "exact_med": 6,
+      "exact_min": 2,
+      "pool_in_topk": {
+        "8": 0.217,
+        "16": 0.45,
+        "32": 0.617
+      },
+      "exact_in_topk": {
+        "8": 0.633,
+        "16": 0.817,
+        "32": 0.975
+      },
+      "per_sample_minrank_pool_med": 3,
+      "per_sample_minrank_exact_med": 2
+    },
+    "per_sample": [
+      {
+        "depth": 0.1,
+        "key": "Driftwood",
+        "value": 8056020,
+        "needle_blocks": [
+          12
+        ],
+        "min_pool": 4,
+        "med_pool": 72,
+        "min_exact": 2,
+        "med_exact": 8
+      },
+      {
+        "depth": 0.1,
+        "key": "Aldebaran",
+        "value": 5343902,
+        "needle_blocks": [
+          12
+        ],
+        "min_pool": 4,
+        "med_pool": 70,
+        "min_exact": 2,
+        "med_exact": 5
+      },
+      {
+        "depth": 0.5,
+        "key": "Evermoor",
+        "value": 9152513,
+        "needle_blocks": [
+          63
+        ],
+        "min_pool": 3,
+        "med_pool": 20,
+        "min_exact": 4,
+        "med_exact": 7
+      },
+      {
+        "depth": 0.5,
+        "key": "Driftwood",
+        "value": 6088743,
+        "needle_blocks": [
+          63
+        ],
+        "min_pool": 3,
+        "med_pool": 21,
+        "min_exact": 4,
+        "med_exact": 11
+      },
+      {
+        "depth": 0.9,
+        "key": "Driftwood",
+        "value": 7007071,
+        "needle_blocks": [
+          114,
+          115
+        ],
+        "min_pool": 2,
+        "med_pool": 14,
+        "min_exact": 2,
+        "med_exact": 4
+      },
+      {
+        "depth": 0.9,
+        "key": "Evermoor",
+        "value": 4664860,
+        "needle_blocks": [
+          114,
+          115
+        ],
+        "min_pool": 2,
+        "med_pool": 14,
+        "min_exact": 2,
+        "med_exact": 4
+      }
+    ]
+  },
+  "32768": {
+    "agg": {
+      "nblk": 256,
+      "pool_med": 28,
+      "pool_min": 1,
+      "exact_med": 9,
+      "exact_min": 1,
+      "pool_in_topk": {
+        "8": 0.183,
+        "16": 0.392,
+        "32": 0.55
+      },
+      "exact_in_topk": {
+        "8": 0.45,
+        "16": 0.7,
+        "32": 0.858
+      },
+      "per_sample_minrank_pool_med": 2,
+      "per_sample_minrank_exact_med": 1
+    },
+    "per_sample": [
+      {
+        "depth": 0.1,
+        "key": "Driftwood",
+        "value": 8056020,
+        "needle_blocks": [
+          25
+        ],
+        "min_pool": 1,
+        "med_pool": 33,
+        "min_exact": 1,
+        "med_exact": 5
+      },
+      {
+        "depth": 0.1,
+        "key": "Aldebaran",
+        "value": 5343902,
+        "needle_blocks": [
+          25
+        ],
+        "min_pool": 1,
+        "med_pool": 30,
+        "min_exact": 1,
+        "med_exact": 5
+      },
+      {
+        "depth": 0.5,
+        "key": "Evermoor",
+        "value": 9152513,
+        "needle_blocks": [
+          127
+        ],
+        "min_pool": 6,
+        "med_pool": 23,
+        "min_exact": 4,
+        "med_exact": 12
+      },
+      {
+        "depth": 0.5,
+        "key": "Driftwood",
+        "value": 6088743,
+        "needle_blocks": [
+          127
+        ],
+        "min_pool": 6,
+        "med_pool": 29,
+        "min_exact": 3,
+        "med_exact": 13
+      },
+      {
+        "depth": 0.9,
+        "key": "Driftwood",
+        "value": 7007071,
+        "needle_blocks": [
+          230
+        ],
+        "min_pool": 3,
+        "med_pool": 19,
+        "min_exact": 2,
+        "med_exact": 8
+      },
+      {
+        "depth": 0.9,
+        "key": "Evermoor",
+        "value": 4664860,
+        "needle_blocks": [
+          230
+        ],
+        "min_pool": 1,
+        "med_pool": 19,
+        "min_exact": 1,
+        "med_exact": 7
+      }
+    ]
+  },
+  "65536": {
+    "agg": {
+      "nblk": 512,
+      "pool_med": 67,
+      "pool_min": 3,
+      "exact_med": 8,
+      "exact_min": 1,
+      "pool_in_topk": {
+        "8": 0.092,
+        "16": 0.192,
+        "32": 0.292
+      },
+      "exact_in_topk": {
+        "8": 0.508,
+        "16": 0.658,
+        "32": 0.817
+      },
+      "per_sample_minrank_pool_med": 10,
+      "per_sample_minrank_exact_med": 1
+    },
+    "per_sample": [
+      {
+        "depth": 0.1,
+        "key": "Driftwood",
+        "value": 8056020,
+        "needle_blocks": [
+          51
+        ],
+        "min_pool": 12,
+        "med_pool": 102,
+        "min_exact": 3,
+        "med_exact": 9
+      },
+      {
+        "depth": 0.1,
+        "key": "Aldebaran",
+        "value": 5343902,
+        "needle_blocks": [
+          51
+        ],
+        "min_pool": 9,
+        "med_pool": 174,
+        "min_exact": 3,
+        "med_exact": 16
+      },
+      {
+        "depth": 0.5,
+        "key": "Evermoor",
+        "value": 9152513,
+        "needle_blocks": [
+          255
+        ],
+        "min_pool": 19,
+        "med_pool": 89,
+        "min_exact": 1,
+        "med_exact": 14
+      },
+      {
+        "depth": 0.5,
+        "key": "Driftwood",
+        "value": 6088743,
+        "needle_blocks": [
+          255
+        ],
+        "min_pool": 18,
+        "med_pool": 110,
+        "min_exact": 2,
+        "med_exact": 17
+      },
+      {
+        "depth": 0.9,
+        "key": "Driftwood",
+        "value": 7007071,
+        "needle_blocks": [
+          460
+        ],
+        "min_pool": 3,
+        "med_pool": 13,
+        "min_exact": 1,
+        "med_exact": 4
+      },
+      {
+        "depth": 0.9,
+        "key": "Evermoor",
+        "value": 4664860,
+        "needle_blocks": [
+          460
+        ],
+        "min_pool": 3,
+        "med_pool": 16,
+        "min_exact": 1,
+        "med_exact": 4
+      }
+    ]
+  }
+}

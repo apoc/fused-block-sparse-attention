@@ -211,3 +211,31 @@ class SelectLearnedMinMax:
         sk = kmm.to(self.Wk.dtype) @ self.Wk
         score = self.scale * (sq @ sk.transpose(-1, -2))                 # (B,Hkv,nblk,nblk)
         return _finish(score.float(), self.topk, self.sink, B, Hkv, nblk, q.device)
+
+
+class SelectMaxQMax:
+    """SelectMax variant that maxes the Quest score over the query block's tokens
+    instead of mean-pooling the query first:
+      score(i,j) = max_{t in block i} [ relu(q_t).kmax_j + neg(q_t).kmin_j ].
+    Tests whether the query block-mean (used by SelectMax) dilutes a peaky retrieval
+    query among its block neighbors. Chunked over query blocks to stay memory-flat."""
+    def __init__(self, topk, bs, sink=True):
+        self.topk, self.bs, self.sink = topk, bs, sink
+
+    @torch.no_grad()
+    def select(self, q, k):
+        B, Hq, L, d = q.shape
+        Hkv = k.shape[1]; grp = Hq // Hkv; bs = self.bs
+        qp, nblk, _ = _pad_blocks(q, bs)
+        kp, _, _ = _pad_blocks(k, bs)
+        qg = qp.view(B, Hkv, grp, nblk, bs, d).mean(2)              # (B,Hkv,nblk,bs,d) mean over grp
+        kb = kp.view(B, Hkv, nblk, bs, d)
+        kmin = kb.min(3).values                                    # (B,Hkv,nblk,d)
+        kmax = kb.max(3).values
+        score = torch.empty(B, Hkv, nblk, nblk, device=q.device)
+        for i in range(nblk):
+            qi = qg[:, :, i]                                       # (B,Hkv,bs,d)
+            s = (torch.einsum('bhtd,bhjd->bhtj', qi.clamp(min=0), kmax)
+                 + torch.einsum('bhtd,bhjd->bhtj', qi.clamp(max=0), kmin))   # (B,Hkv,bs,nblk)
+            score[:, :, i] = s.max(2).values                       # max over the bs query tokens
+        return _finish(score, self.topk, self.sink, B, Hkv, nblk, q.device)
