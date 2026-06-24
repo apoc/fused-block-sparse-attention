@@ -155,8 +155,9 @@ SRAM, never materializing the gathered tensor.
 \item A \textbf{frontier-model validation}: swapping the training-free selector into
   the 10 full-attention layers of Qwen3.6-35B-A3B (35B-parameter MoE) holds within
   $1.6\%$ of full-attention perplexity at 64k while attending to $6\%$ of blocks and
-  beats random selection $3$ to $4\times$ at matched budget; a distilled selector
-  does not beat the heuristic (\Cref{sec:donor}).
+  beats random selection $3$ to $4\times$ at matched budget. An oracle ceiling bounds
+  the achievable gain (a perfect selector roughly halves the heuristic's loss), and a
+  distilled linear selector captures none of it (\Cref{sec:donor}).
 \end{itemize}
 
 % ─═ 2. Background ═════════════════════════════════════════════════════════
@@ -778,13 +779,54 @@ context & top-8 & top-16 & top-32 & random-16 \\
 \end{tabular}
 \end{table}
 
+\paragraph{How much headroom? The oracle ceiling.} To bound what \emph{any}
+top-$k$ block selector could achieve, we replace the heuristic score with the
+stock model's own per-block attention mass, an oracle that selects the $k$
+highest-mass blocks (Table~\ref{tab:donor-oracle}). The oracle roughly halves the
+heuristic's degradation, and the headroom grows with context: at top-16 the
+heuristic-to-oracle gap widens from $0.6$ to $2.2$ percentage points across 16k to
+64k (at 64k, $+3.69\%$ falls to $+1.45\%$), and at top-32 from $0.2$ to $1.1$ (at
+64k, $+1.60\%$ to $+0.52\%$). The training-free heuristic is thus strong but not
+optimal: real selection headroom exists, and it is largest in the long-context,
+moderate-budget regime where sparse attention matters most. At the most aggressive
+budget (top-8 at 64k) the oracle's advantage falls within measurement noise; only
+two non-overlapping windows fit at this length.
+
+\begin{table}[h]
+\centering
+\caption{Oracle ceiling. Perplexity delta vs.\ stock (\%) for the training-free
+max heuristic and an oracle that selects the top-$k$ blocks by the stock model's
+true per-block attention mass. The oracle lower-bounds the achievable delta for any
+top-$k$ block selector; the heuristic-to-oracle gap is the recoverable headroom,
+which grows with context. Same evaluation windows as Table~\ref{tab:donor}.}
+\label{tab:donor-oracle}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+& \multicolumn{2}{c}{top-8} & \multicolumn{2}{c}{top-16} & \multicolumn{2}{c}{top-32} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+context & max & oracle & max & oracle & max & oracle \\
+\midrule
+16k & $+3.79$ & $+1.75$ & $+1.45$ & $+0.83$ & $+0.48$ & $+0.24$ \\
+32k & $+5.43$ & $+3.03$ & $+2.33$ & $+1.17$ & $+0.97$ & $+0.42$ \\
+64k & $+10.1$ & $+10.7$ & $+3.69$ & $+1.45$ & $+1.60$ & $+0.52$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{A learned selector does not help.} We also distilled a small per-layer
 selector (linear maps of block-pooled query and key, trained by KL to the stock
 per-block attention mass on a short calibration set) and swapped it in. It
 \emph{underperforms} the training-free heuristic (at 16k, top-8 $+5.5\%$ vs.\
 $+4.0\%$; top-16 $+2.4\%$ vs.\ $+1.2\%$): a linear map on pooled post-RoPE
 representations cannot beat a direct $\max q\cdot k$ estimate, echoing the
-representation tradeoff of \Cref{sec:centroid}.
+representation tradeoff of \Cref{sec:centroid}. The oracle of
+Table~\ref{tab:donor-oracle} shows this is not for want of headroom (a perfect
+selector recovers roughly half of the heuristic's loss); the distilled map fails to
+capture it because mean-pooling the query and key blocks averages away the
+per-block extremes that the $\max q\cdot k$ estimate keeps. Recovering the oracle's
+headroom with a learned, richer-feature selector, rather than this pooled linear
+map, remains open.
 
 \paragraph{Scope.} This is an inference-time, forward-only perplexity study on
 in-distribution text; the relative deltas, not absolute perplexity, are the signal.
