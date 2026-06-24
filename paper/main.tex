@@ -822,16 +822,54 @@ $+4.0\%$; top-16 $+2.4\%$ vs.\ $+1.2\%$): a linear map on pooled post-RoPE
 representations cannot beat a direct $\max q\cdot k$ estimate, echoing the
 representation tradeoff of \Cref{sec:centroid}. The oracle of
 Table~\ref{tab:donor-oracle} shows this is not for want of headroom (a perfect
-selector recovers roughly half of the heuristic's loss); the distilled map fails to
-capture it because mean-pooling the query and key blocks averages away the
-per-block extremes that the $\max q\cdot k$ estimate keeps. Recovering the oracle's
-headroom with a learned, richer-feature selector, rather than this pooled linear
-map, remains open.
+selector recovers roughly half of the heuristic's loss). The bottleneck is not the
+pooled representation: giving the learned selector per-block key min and max, the
+extremes the $\max q\cdot k$ estimate uses, leaves its fit to the teacher
+block-mass unchanged (identical KL) and still does not beat the heuristic (16k,
+top-8 $+4.6\%$, top-16 $+3.2\%$). What it imitates, the average per-block attention
+mass, is a softer signal than the peak interaction the heuristic estimates
+directly; recovering the oracle's headroom needs a better training target than mass
+distillation, not richer pooling, and remains open.
+
+\paragraph{Downstream retrieval: needle in a haystack.} Perplexity is a weak proxy
+for long-context capability, so we test single-needle retrieval directly: a magic
+number is placed at varying depths in long filler text and the model is queried for
+it, scored by greedy match on the answer span (six needles per cell). The dense
+model retrieves perfectly at every context (Table~\ref{tab:niah}), so the harness is
+sound. Content selection preserves retrieval, but only above a block budget near
+$13\%$, well above the $6\%$ at which perplexity stays within $1.6\%$: at 32k,
+top-32 ($13\%$) retrieves all six needles while top-16 ($6\%$) retrieves none, and
+at 64k every tested budget ($\le 6\%$) fails. Above that floor, content beats random
+at matched budget (16k top-16: $0.67$ vs.\ $0.0$); below it both are unreliable. So
+perplexity overstates the achievable sparsity for retrieval by roughly $2\times$:
+the same swap that holds perplexity at $6\%$ of blocks needs about $13\%$ to recover
+a needle. Six needles per cell is coarse, so the budget floor and the dense ceiling
+are the robust signals, not the per-cell rates.
+
+\begin{table}[h]
+\centering
+\caption{Single-needle retrieval (exact match, six needles per cell) for the
+block-sparse swap, with the fraction of blocks attended in parentheses. The dense
+model retrieves perfectly; content selection needs about $13\%$ of blocks, roughly
+twice the $6\%$ at which perplexity stays within $1.6\%$ (Table~\ref{tab:donor}).}
+\label{tab:niah}
+\small
+\begin{tabular}{lccccc}
+\toprule
+context & stock & top-8 & top-16 & top-32 & random-16 \\
+\midrule
+16k & $1.00$ & $0.00$ (6\%) & $0.67$ (13\%) & $0.67$ (25\%) & $0.00$ (13\%) \\
+32k & $1.00$ & $0.00$ (3\%) & $0.00$ (6\%) & $1.00$ (13\%) & $0.33$ (6\%) \\
+64k & $1.00$ & $0.00$ (2\%) & $0.00$ (3\%) & $0.00$ (6\%) & $0.00$ (3\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Scope.} This is an inference-time, forward-only perplexity study on
 in-distribution text; the relative deltas, not absolute perplexity, are the signal.
-It does not measure downstream long-context tasks (needle-in-a-haystack, RULER) or
-training with the swap, both of which are future work, as is a grouped-query,
+It measures perplexity and single-needle retrieval (Table~\ref{tab:niah}); broader
+suites (RULER, multi-needle) and training with the swap remain future work, as is a
+grouped-query,
 RoPE-aware fused kernel for wall-clock gains at these contexts.
 
 % ─═ 8. Discussion ═════════════════════════════════════════════════════════

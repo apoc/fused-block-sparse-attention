@@ -185,3 +185,29 @@ class SelectLearned:
         sk = kpool.to(self.Wk.dtype) @ self.Wk
         score = self.scale * (sq @ sk.transpose(-1, -2))                 # (B,Hkv,nblk,nblk)
         return _finish(score.float(), self.topk, self.sink, B, Hkv, nblk, q.device)
+
+
+class SelectLearnedMinMax:
+    """Learned selector with per-block key min/max features instead of mean-pool.
+    Query is still mean-pooled (as in Quest/SelectMax); the key side concatenates
+    per-block kmin and kmax (the extremes SelectMax uses), projected through Wk
+    (2d, sel_dim). Isolates whether the mean-pool SelectLearned loses to SelectMax
+    because pooling averages away those extremes."""
+    def __init__(self, Wq, Wk, topk, bs, sink=True, scale=None):
+        self.Wq, self.Wk = Wq, Wk
+        self.topk, self.bs, self.sink = topk, bs, sink
+        self.scale = float(Wq.shape[1] ** -0.5) if scale is None else float(scale)
+
+    @torch.no_grad()
+    def select(self, q, k):
+        B, Hq, L, d = q.shape
+        Hkv = k.shape[1]; grp = Hq // Hkv; bs = self.bs
+        qp, nblk, _ = _pad_blocks(q, bs)
+        kp, _, _ = _pad_blocks(k, bs)
+        qpool = qp.view(B, Hkv, grp, nblk, bs, d).mean(2).mean(3)        # (B,Hkv,nblk,d)
+        kb = kp.view(B, Hkv, nblk, bs, d)
+        kmm = torch.cat([kb.min(3).values, kb.max(3).values], dim=-1)   # (B,Hkv,nblk,2d)
+        sq = qpool.to(self.Wq.dtype) @ self.Wq
+        sk = kmm.to(self.Wk.dtype) @ self.Wk
+        score = self.scale * (sq @ sk.transpose(-1, -2))                 # (B,Hkv,nblk,nblk)
+        return _finish(score.float(), self.topk, self.sink, B, Hkv, nblk, q.device)
