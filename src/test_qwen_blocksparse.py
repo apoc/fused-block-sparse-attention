@@ -69,3 +69,15 @@ def test_selectrandom_causal_and_budget():
     assert idx.shape == (B, Hkv, nblk, 3 + 2)
     qb = torch.arange(nblk).view(1, 1, nblk, 1)
     assert (idx <= qb).all()
+
+
+def test_selectlearned_causal_and_budget():
+    from qwen_blocksparse import SelectLearned
+    B, Hq, Hkv, L, d = 1, 16, 2, 256, 64
+    q = torch.randn(B, Hq, L, d); k = torch.randn(B, Hkv, L, d)
+    Wq = torch.randn(d, 32); Wk = torch.randn(d, 32)
+    idx = SelectLearned(Wq, Wk, topk=4, bs=32, sink=True).select(q, k)
+    nblk = L // 32
+    assert idx.shape == (B, Hkv, nblk, 4 + 2)
+    qb = torch.arange(nblk).view(1, 1, nblk, 1)
+    assert (idx <= qb).all()

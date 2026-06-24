@@ -163,3 +163,25 @@ class SelectAll:
         Hkv = k.shape[1]
         nblk = (L + self.bs - 1) // self.bs
         return torch.arange(nblk, device=q.device).view(1, 1, 1, nblk).expand(B, Hkv, nblk, nblk).contiguous()
+
+
+class SelectLearned:
+    """Learned per-layer selector: project block-pooled q/k through Wq/Wk, score,
+    top-k. Wq/Wk (d, sel_dim) are trained (Stage 2) to match teacher block-mass."""
+    def __init__(self, Wq, Wk, topk, bs, sink=True, scale=None):
+        self.Wq, self.Wk = Wq, Wk
+        self.topk, self.bs, self.sink = topk, bs, sink
+        self.scale = float(Wq.shape[1] ** -0.5) if scale is None else float(scale)
+
+    @torch.no_grad()
+    def select(self, q, k):
+        B, Hq, L, d = q.shape
+        Hkv = k.shape[1]; grp = Hq // Hkv; bs = self.bs
+        qp, nblk, _ = _pad_blocks(q, bs)
+        kp, _, _ = _pad_blocks(k, bs)
+        qpool = qp.view(B, Hkv, grp, nblk, bs, d).mean(2).mean(3)        # (B,Hkv,nblk,d)
+        kpool = kp.view(B, Hkv, nblk, bs, d).mean(3)                     # (B,Hkv,nblk,d)
+        sq = qpool.to(self.Wq.dtype) @ self.Wq
+        sk = kpool.to(self.Wk.dtype) @ self.Wk
+        score = self.scale * (sq @ sk.transpose(-1, -2))                 # (B,Hkv,nblk,nblk)
+        return _finish(score.float(), self.topk, self.sink, B, Hkv, nblk, q.device)
