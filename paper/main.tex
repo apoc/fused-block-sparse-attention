@@ -854,9 +854,9 @@ $B_s$ queries dilutes the one that retrieves. Selecting by each query block's la
 token instead (a one-line change, and exactly the query an autoregressive decode step
 issues) sharply improves retrieval at matched budget: 16k top-16 from $0.40$ to
 $1.00$, 32k top-16 from $0.20$ to $0.68$, and 64k top-32 from $0.08$ to $0.78$ (the
-$6\%$ perplexity budget); it does not fully close the floor at the most aggressive
-long-context budget (64k top-16 reaches only $0.23$), consistent with the single-token
-rank rather than a propagation limit. A
+$6\%$ perplexity budget). A residual floor remains at the most aggressive
+long-context budget (64k top-16 reaches only $0.23$) that selection rank alone does
+not explain. A
 two-stage mean-then-max variant helps less, since the per-token max re-inflates
 competitor blocks. The prefill block-mean, not content selection, thus sets most of
 the retrieval floor, and single-token decode should largely avoid it. This is
