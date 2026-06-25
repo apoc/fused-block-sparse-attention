@@ -839,25 +839,24 @@ distillation, not richer pooling, and remains open.
 \paragraph{Downstream retrieval: needle in a haystack.} Perplexity is a weak proxy
 for long-context capability, so we test single-needle retrieval directly: a magic
 number is placed at varying depths in long filler text and the model is queried for
-it, scored by greedy match on the answer span (six needles per cell). The dense
+it, scored by greedy match on the answer span ($40$ needles per cell). The dense
 model retrieves perfectly at every context (Table~\ref{tab:niah}), so the harness is
-sound. With the block-mean selector, retrieval holds only above a budget near
-$13\%$, well above the $6\%$ at which perplexity stays within $1.6\%$
-(Table~\ref{tab:niah}): at 32k, top-32 ($13\%$) retrieves all six needles while
-top-16 ($6\%$) retrieves none, and at 64k every tested budget ($\le 6\%$) fails;
-where it works it beats random ($0.67$ vs.\ $0.0$ at 16k top-16). So this selector
-needs about twice the perplexity budget to retrieve. Six needles per cell is coarse,
-so the budget floor and the dense ceiling are the robust signals, not the per-cell
-rates.
+sound. With the block-mean selector, retrieval needs a budget well above the $6\%$ at
+which perplexity stays within $1.6\%$: at 32k, top-32 ($13\%$) retrieves $0.85$ while
+top-16 ($6\%$) reaches only $0.20$, and at 64k even top-32 ($6\%$) reaches $0.08$. It
+beats random at matched budget ($0.40$ vs.\ $0.00$ at 16k top-16). So the block-mean
+selector needs roughly twice the perplexity budget to retrieve.
 Most of this floor is the selector's query pooling, not content. SelectMax scores
 key blocks against the block-mean query, which ranks the needle block near $13\%$ of
 all blocks and worsens with context (median rank 19, 28, 67 at 16k, 32k, 64k),
 whereas the lone retrieval query token ranks it near 8 at every length: pooling
 $B_s$ queries dilutes the one that retrieves. Selecting by each query block's last
 token instead (a one-line change, and exactly the query an autoregressive decode step
-issues) largely closes the floor: it lifts 16k top-16 from $0.67$ to $1.0$ and, where
-the block-mean retrieves nothing, recovers $0.67$ at 32k top-16 and at both top-16 and
-top-32 of 64k, tracking the single-token rank rather than a propagation limit. A
+issues) sharply improves retrieval at matched budget: 16k top-16 from $0.40$ to
+$1.00$, 32k top-16 from $0.20$ to $0.68$, and 64k top-32 from $0.08$ to $0.78$ (the
+$6\%$ perplexity budget); it does not fully close the floor at the most aggressive
+long-context budget (64k top-16 reaches only $0.23$), consistent with the single-token
+rank rather than a propagation limit. A
 two-stage mean-then-max variant helps less, since the per-token max re-inflates
 competitor blocks. The prefill block-mean, not content selection, thus sets most of
 the retrieval floor, and single-token decode should largely avoid it. This is
@@ -870,13 +869,13 @@ retrieval in a training-free swap and show a one-line reversion recovers most of
 
 \begin{table}[h]
 \centering
-\caption{Single-needle retrieval (exact match, six needles per cell) for the
+\caption{Single-needle retrieval (exact match, $40$ needles per cell) for the
 block-sparse swap. Each budget cell shows the block-mean selector / the last-token
 selector; the dense model retrieves perfectly ($1.00$) at every context. Block
 fractions for top-8/16/32 are $6/13/25\%$ at 16k, $3/6/13\%$ at 32k, $2/3/6\%$ at
 64k; random-16 is the block-mean selector over random blocks. The block-mean
-selector needs about $13\%$ of blocks, while the last-token selector retrieves at the
-perplexity budget (64k top-32, $6\%$) and below.}
+selector needs about $13\%$ of blocks; the last-token selector retrieves at the
+perplexity budget (64k top-32, $6\%$: $0.78$ vs.\ $0.08$).}
 \label{tab:niah}
 \small
 \begin{tabular}{lcccc}
@@ -884,9 +883,9 @@ perplexity budget (64k top-32, $6\%$) and below.}
 context & top-8 & top-16 & top-32 & random-16 \\
  & mean / last & mean / last & mean / last & mean \\
 \midrule
-16k & $0.00/0.50$ & $0.67/1.00$ & $0.67/1.00$ & $0.00$ \\
-32k & $0.00/0.00$ & $0.00/0.67$ & $1.00/1.00$ & $0.33$ \\
-64k & $0.00/0.33$ & $0.00/0.67$ & $0.00/0.67$ & $0.00$ \\
+16k & $0.03/0.70$ & $0.40/1.00$ & $0.68/1.00$ & $0.00$ \\
+32k & $0.00/0.33$ & $0.20/0.68$ & $0.85/0.97$ & $0.20$ \\
+64k & $0.00/0.00$ & $0.00/0.23$ & $0.08/0.78$ & $0.00$ \\
 \bottomrule
 \end{tabular}
 \end{table}
