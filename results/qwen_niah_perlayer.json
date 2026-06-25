@@ -1,0 +1,188 @@
+{
+  "16384": {
+    "3": {
+      "pool_med": 20,
+      "pool_min": 5,
+      "exact_med": 12,
+      "exact_min": 2
+    },
+    "7": {
+      "pool_med": 6,
+      "pool_min": 2,
+      "exact_med": 3,
+      "exact_min": 2
+    },
+    "11": {
+      "pool_med": 17,
+      "pool_min": 7,
+      "exact_med": 5,
+      "exact_min": 2
+    },
+    "15": {
+      "pool_med": 13,
+      "pool_min": 3,
+      "exact_med": 4,
+      "exact_min": 4
+    },
+    "19": {
+      "pool_med": 49,
+      "pool_min": 15,
+      "exact_med": 17,
+      "exact_min": 3
+    },
+    "23": {
+      "pool_med": 48,
+      "pool_min": 14,
+      "exact_med": 22,
+      "exact_min": 2
+    },
+    "27": {
+      "pool_med": 40,
+      "pool_min": 9,
+      "exact_med": 5,
+      "exact_min": 2
+    },
+    "31": {
+      "pool_med": 31,
+      "pool_min": 12,
+      "exact_med": 7,
+      "exact_min": 2
+    },
+    "35": {
+      "pool_med": 26,
+      "pool_min": 12,
+      "exact_med": 4,
+      "exact_min": 2
+    },
+    "39": {
+      "pool_med": 7,
+      "pool_min": 4,
+      "exact_med": 6,
+      "exact_min": 2
+    }
+  },
+  "32768": {
+    "3": {
+      "pool_med": 30,
+      "pool_min": 8,
+      "exact_med": 30,
+      "exact_min": 8
+    },
+    "7": {
+      "pool_med": 7,
+      "pool_min": 3,
+      "exact_med": 2,
+      "exact_min": 2
+    },
+    "11": {
+      "pool_med": 11,
+      "pool_min": 6,
+      "exact_med": 5,
+      "exact_min": 4
+    },
+    "15": {
+      "pool_med": 12,
+      "pool_min": 3,
+      "exact_med": 4,
+      "exact_min": 2
+    },
+    "19": {
+      "pool_med": 50,
+      "pool_min": 31,
+      "exact_med": 11,
+      "exact_min": 1
+    },
+    "23": {
+      "pool_med": 77,
+      "pool_min": 69,
+      "exact_med": 41,
+      "exact_min": 20
+    },
+    "27": {
+      "pool_med": 70,
+      "pool_min": 60,
+      "exact_med": 20,
+      "exact_min": 6
+    },
+    "31": {
+      "pool_med": 45,
+      "pool_min": 16,
+      "exact_med": 9,
+      "exact_min": 5
+    },
+    "35": {
+      "pool_med": 32,
+      "pool_min": 17,
+      "exact_med": 6,
+      "exact_min": 2
+    },
+    "39": {
+      "pool_med": 9,
+      "pool_min": 1,
+      "exact_med": 3,
+      "exact_min": 1
+    }
+  },
+  "65536": {
+    "3": {
+      "pool_med": 69,
+      "pool_min": 9,
+      "exact_med": 30,
+      "exact_min": 2
+    },
+    "7": {
+      "pool_med": 15,
+      "pool_min": 4,
+      "exact_med": 4,
+      "exact_min": 2
+    },
+    "11": {
+      "pool_med": 26,
+      "pool_min": 8,
+      "exact_med": 5,
+      "exact_min": 3
+    },
+    "15": {
+      "pool_med": 43,
+      "pool_min": 5,
+      "exact_med": 7,
+      "exact_min": 4
+    },
+    "19": {
+      "pool_med": 72,
+      "pool_min": 3,
+      "exact_med": 7,
+      "exact_min": 1
+    },
+    "23": {
+      "pool_med": 74,
+      "pool_min": 9,
+      "exact_med": 11,
+      "exact_min": 1
+    },
+    "27": {
+      "pool_med": 70,
+      "pool_min": 7,
+      "exact_med": 2,
+      "exact_min": 1
+    },
+    "31": {
+      "pool_med": 173,
+      "pool_min": 59,
+      "exact_med": 22,
+      "exact_min": 2
+    },
+    "35": {
+      "pool_med": 186,
+      "pool_min": 52,
+      "exact_med": 8,
+      "exact_min": 5
+    },
+    "39": {
+      "pool_med": 43,
+      "pool_min": 3,
+      "exact_med": 15,
+      "exact_min": 1
+    }
+  }
+}
